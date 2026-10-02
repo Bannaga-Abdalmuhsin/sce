@@ -1,139 +1,103 @@
 <!doctype html>
 <html lang="ar" dir="rtl">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <meta name="theme-color" content="#071b2a" />
-  <title>مِعيار AI | المراجع الذكي للمخططات الكهربائية</title>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#071922">
+  <title>مِعيار AI | منصة الامتثال الكهربائي</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=3" />
+  <link rel="stylesheet" href="styles.css?v=10">
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="#" aria-label="الرئيسية">
-      <span class="brand-mark">م</span>
-      <span><strong>مِعيار <i>AI</i></strong><small>المراجع الذكي للمخططات الكهربائية</small></span>
-    </a>
-    <div class="top-actions">
-      <span class="pilot-badge">نموذج تجريبي · SCE 2026</span>
-      <button class="icon-btn" id="helpBtn" aria-label="حول المنصة">؟</button>
-    </div>
-  </header>
-
-  <main>
-    <section class="hero">
-      <div>
-        <span class="eyebrow">من المخطط إلى الامتثال في دقائق</span>
-        <h1>تدقيق هندسي ذكي،<br><em>موثّق وقابل للتنفيذ.</em></h1>
-        <p>ارفع المخطط الكهربائي لتحليل بياناته، كشف المخالفات، ربطها بمتطلبات الكود، واقتراح الإجراء التصحيحي مع إبقاء القرار النهائي بيد المهندس.</p>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <a class="brand" href="#"><span class="brand-mark">م</span><span><b>مِعيار <i>AI</i></b><small>Electrical Compliance OS</small></span></a>
+      <nav aria-label="التنقل الرئيسي">
+        <button class="nav-item active" data-view="audit"><span>⌁</span> مساحة التدقيق</button>
+        <button class="nav-item" data-view="projects"><span>▦</span> المشاريع <small>3</small></button>
+        <button class="nav-item" data-view="rules"><span>✓</span> مكتبة القواعد <small>24</small></button>
+        <button class="nav-item" data-view="reports"><span>▤</span> التقارير</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="code-card"><span class="live-dot"></span><div><b>SBC 401 — 2024</b><small>حزمة قواعد نشطة · تجريبية</small></div></div>
+        <button class="user-card"><span>عب</span><div><b>م. عبدالمحسن</b><small>مهندس مراجع</small></div><i>⋮</i></button>
       </div>
-      <div class="hero-stats">
-        <article><b>8</b><span>فحوصات هندسية</span></article>
-        <article><b>&lt; 60</b><span>ثانية للتحليل</span></article>
-        <article><b>100%</b><span>نتائج قابلة للتتبع</span></article>
-      </div>
-    </section>
+    </aside>
 
-    <section class="workspace">
-      <aside class="upload-panel card">
-        <div class="section-title">
-          <span class="step">01</span>
-          <div><h2>ابدأ مراجعة جديدة</h2><p>PDF أو صورة للمخطط الكهربائي</p></div>
+    <main class="main">
+      <header class="topbar">
+        <div><p class="crumb">المشاريع / برج الأعمال — الرياض /</p><h1>مراجعة المخطط الكهربائي</h1></div>
+        <div class="top-actions"><span class="autosave">✓ تم الحفظ الآن</span><button class="ghost" id="helpBtn">عن الحل</button><button class="primary small" id="exportTop">تصدير التقرير</button></div>
+      </header>
+
+      <section class="project-strip">
+        <div class="project-id"><span>MEP</span><div><b>SCE-RYD-024</b><small>مبنى تجاري · إصدار المخطط Rev.03</small></div></div>
+        <div class="progress-line" aria-label="مراحل التدقيق">
+          <button class="stage done" data-stage="1"><i>✓</i><span>بيانات المشروع</span></button><em></em>
+          <button class="stage done" data-stage="2"><i>✓</i><span>استخراج العناصر</span></button><em></em>
+          <button class="stage active" data-stage="3"><i>3</i><span>التدقيق والحسابات</span></button><em></em>
+          <button class="stage" data-stage="4"><i>4</i><span>المراجعة والاعتماد</span></button>
         </div>
-
-        <label class="dropzone" id="dropzone">
-          <input id="fileInput" type="file" accept=".pdf,image/*" hidden>
-          <span class="upload-icon">↥</span>
-          <strong>اسحب المخطط هنا</strong>
-          <span>أو اضغط لاختيار الملف</span>
-          <small>الحد الأقصى 20 ميجابايت</small>
-        </label>
-
-        <div class="file-row" id="fileRow" hidden>
-          <span class="file-icon">PDF</span>
-          <div><strong id="fileName">Electrical_SLD.pdf</strong><small id="fileSize">2.4 MB</small></div>
-          <button id="removeFile" aria-label="حذف الملف">×</button>
-        </div>
-
-        <label class="field"><span>نوع المشروع</span>
-          <select id="projectType"><option>مبنى تجاري</option><option>مبنى سكني</option><option>منشأة صناعية</option><option>مرفق اتصالات</option></select>
-        </label>
-        <label class="field"><span>نطاق التدقيق</span>
-          <select><option>المخطط الأحادي وجدول الأحمال</option><option>لوحات التوزيع والحماية</option><option>الكابلات وهبوط الجهد</option></select>
-        </label>
-        <button class="primary" id="analyzeBtn"><span>✦</span> تشغيل التدقيق الذكي</button>
-        <button class="secondary" id="sampleBtn">استخدام المخطط التجريبي</button>
-
-        <div class="trust-note"><span>⌾</span><p><b>قرار هندسي مسؤول</b><br>النتائج مساعدة للمراجعة ولا تستبدل اعتماد المهندس المرخّص.</p></div>
-      </aside>
-
-      <section class="viewer card">
-        <div class="viewer-head">
-          <div><h2>عارض المخطط</h2><span id="viewerStatus">لم يبدأ التحليل</span></div>
-          <div class="viewer-tools"><button id="zoomOut">−</button><span id="zoomValue">100%</span><button id="zoomIn">+</button></div>
-        </div>
-        <div class="drawing-stage" id="drawingStage">
-          <div class="empty-state" id="emptyState"><span>⌗</span><h3>المخطط سيظهر هنا</h3><p>ارفع ملفًا أو استخدم النموذج التجريبي لبدء التدقيق.</p></div>
-          <div class="blueprint" id="blueprint" hidden>
-            <svg viewBox="0 0 820 520" role="img" aria-label="مخطط كهربائي أحادي تجريبي">
-              <defs><pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse"><path d="M24 0H0V24" fill="none" stroke="#d9e2e8" stroke-width=".6"/></pattern></defs>
-              <rect width="820" height="520" fill="#fbfdfe"/><rect width="820" height="520" fill="url(#grid)"/>
-              <g stroke="#244050" stroke-width="3" fill="white">
-                <rect x="48" y="190" width="112" height="78" rx="5"/><rect x="254" y="190" width="112" height="78" rx="5"/>
-                <rect x="468" y="86" width="122" height="72" rx="5"/><rect x="468" y="202" width="122" height="72" rx="5"/><rect x="468" y="318" width="122" height="72" rx="5"/>
-                <line x1="160" y1="229" x2="254" y2="229"/><line x1="366" y1="229" x2="416" y2="229"/><line x1="416" y1="122" x2="416" y2="354"/>
-                <line x1="416" y1="122" x2="468" y2="122"/><line x1="416" y1="238" x2="468" y2="238"/><line x1="416" y1="354" x2="468" y2="354"/>
-                <line x1="590" y1="122" x2="688" y2="122"/><line x1="590" y1="238" x2="688" y2="238"/><line x1="590" y1="354" x2="688" y2="354"/>
-                <circle cx="710" cy="122" r="22"/><circle cx="710" cy="238" r="22"/><circle cx="710" cy="354" r="22"/>
-              </g>
-              <g fill="#244050" font-family="Arial" text-anchor="middle"><text x="104" y="220" font-size="15">UTILITY</text><text x="104" y="242" font-size="13">400V / 3Φ</text><text x="310" y="220" font-size="15">MDB-01</text><text x="310" y="242" font-size="13">250A MCCB</text><text x="529" y="116" font-size="14">DB-L1</text><text x="529" y="138" font-size="12">63A / 16mm²</text><text x="529" y="232" font-size="14">DB-P1</text><text x="529" y="254" font-size="12">100A / 25mm²</text><text x="529" y="348" font-size="14">DB-HVAC</text><text x="529" y="370" font-size="12">125A / 25mm²</text><text x="710" y="127" font-size="13">45kW</text><text x="710" y="243" font-size="13">68kW</text><text x="710" y="359" font-size="13">82kW</text></g>
-              <g class="markers" id="markers">
-                <circle class="marker critical" cx="529" cy="354" r="18"/><text x="529" y="360">1</text>
-                <circle class="marker warning" cx="310" cy="229" r="18"/><text x="310" y="235">2</text>
-                <circle class="marker info" cx="416" cy="122" r="18"/><text x="416" y="128">3</text>
-              </g>
-              <text x="40" y="488" fill="#607887" font-family="Arial" font-size="13">DEMO · SINGLE LINE DIAGRAM · REV 03</text>
-            </svg>
-          </div>
-          <div class="scan-line" id="scanLine" hidden></div>
-        </div>
-        <div class="legend"><span><i class="dot red"></i>حرج</span><span><i class="dot amber"></i>تحذير</span><span><i class="dot blue"></i>ملاحظة</span></div>
+        <div class="project-score"><span>درجة الامتثال</span><b id="headerScore">72%</b></div>
       </section>
-    </section>
 
-    <section class="results" id="results" hidden>
-      <div class="results-head"><div><span class="eyebrow">نتيجة التدقيق</span><h2>تقرير الامتثال الهندسي</h2></div><button class="report-btn" id="printBtn">تنزيل التقرير ↧</button></div>
-      <div class="score-grid">
-        <article class="score-card"><div class="score-ring"><span id="score">72</span><small>/100</small></div><div><h3>درجة الامتثال</h3><p>يحتاج إلى معالجة الملاحظات الحرجة قبل الاعتماد.</p></div></article>
-        <article class="metric critical-m"><b>1</b><span>مخالفة حرجة</span></article>
-        <article class="metric warning-m"><b>2</b><span>تحذيران</span></article>
-        <article class="metric success-m"><b>5</b><span>فحوصات مجتازة</span></article>
-      </div>
-
-      <div class="findings-layout">
-        <div class="findings card">
-          <div class="finding-tabs"><button class="active" data-filter="all">الكل 8</button><button data-filter="critical">حرج 1</button><button data-filter="warning">تحذيرات 2</button><button data-filter="passed">مجتاز 5</button></div>
-          <article class="finding" data-type="critical"><span class="severity critical">حرج</span><div><h3>عدم توافق القاطع مع مقطع الكابل</h3><p>القاطع المغذي للوحة DB-HVAC بسعة 125A بينما مقطع الكابل المحدد 25mm² لا يحقق هامش الحماية المطلوب تحت ظروف التصميم.</p><div class="finding-meta"><span>المرجع: متطلبات الحماية من زيادة التيار</span><span>الموقع: DB-HVAC</span></div><div class="recommendation"><b>التصحيح المقترح</b><p>إعادة احتساب سعة حمل الكابل وفق طريقة التمديد ودرجة الحرارة، ثم زيادة المقطع أو تخفيض سعة القاطع.</p></div></div><button class="locate" data-marker="1">عرض ↗</button></article>
-          <article class="finding" data-type="warning"><span class="severity warning">تحذير</span><div><h3>هامش تحميل منخفض للوحة الرئيسية</h3><p>إجمالي الأحمال المتصلة يقترب من السعة الاسمية للقاطع الرئيسي دون هامش توسع تشغيلي واضح.</p><div class="finding-meta"><span>المرجع: تنسيق الأحمال وعوامل الطلب</span><span>الموقع: MDB-01</span></div></div><button class="locate" data-marker="2">عرض ↗</button></article>
-          <article class="finding" data-type="warning"><span class="severity info">ملاحظة</span><div><h3>بيانات التأريض غير مكتملة</h3><p>لا يظهر على المخطط مقطع موصل التأريض ونقطة الربط الرئيسية لجميع اللوحات الفرعية.</p><div class="finding-meta"><span>المرجع: متطلبات التأريض والربط</span><span>الموقع: خط التوزيع</span></div></div><button class="locate" data-marker="3">عرض ↗</button></article>
-          <article class="finding passed-item" data-type="passed"><span class="severity passed">مجتاز</span><div><h3>تسميات اللوحات والدوائر</h3><p>التسميات الأساسية واضحة ومتسقة في المخطط الأحادي.</p></div></article>
+      <section class="view active" id="auditView">
+        <div class="kpi-grid">
+          <article><span class="kpi-icon cyan">⌁</span><div><small>العناصر المستخرجة</small><b>18</b><em>6 لوحات · 12 دائرة</em></div></article>
+          <article><span class="kpi-icon green">✓</span><div><small>القواعد المجتازة</small><b id="passKpi">19</b><em>من أصل 24 قاعدة</em></div></article>
+          <article><span class="kpi-icon red">!</span><div><small>مخالفات حرجة</small><b id="criticalKpi">1</b><em>تتطلب إجراءً</em></div></article>
+          <article><span class="kpi-icon amber">△</span><div><small>تحتاج مراجعة</small><b id="warningKpi">4</b><em>قرار المهندس مطلوب</em></div></article>
         </div>
-        <aside class="audit-summary card">
-          <h3>ملخص قابل للتتبع</h3>
-          <div class="trace"><span>✓</span><p><b>استخراج العناصر</b><small>3 لوحات · 3 أحمال · 4 وسائل حماية</small></p></div>
-          <div class="trace"><span>✓</span><p><b>محرك القواعد</b><small>8 قواعد هندسية تم تشغيلها</small></p></div>
-          <div class="trace"><span>✓</span><p><b>مراجعة الحسابات</b><small>الأحمال · الحماية · المقاطع</small></p></div>
-          <div class="trace"><span>!</span><p><b>اعتماد المهندس</b><small>بانتظار المراجعة البشرية النهائية</small></p></div>
-          <hr>
-          <p class="disclaimer">كل نتيجة مرتبطة بموقع في المخطط وسبب فني وإجراء مقترح. مراجع البنود في النموذج التجريبي وصفية إلى حين ربط النسخة المرخصة من الكود.</p>
-        </aside>
-      </div>
-    </section>
-  </main>
 
-  <div class="modal" id="modal" hidden><div class="modal-card"><button id="closeModal">×</button><span class="brand-mark">م</span><h2>عن مِعيار AI</h2><p>نموذج أولي مقدم لمسار التطوير الهندسي — تحدي التدقيق الآلي والامتثال للأكواد في الهاكاثون الهندسي SCE 2026.</p><p>يجمع الحل بين رؤية الحاسب، واستخراج بيانات المخططات، ومحرك قواعد هندسية، وذكاء اصطناعي تفسيري.</p></div></div>
-  <script src="app.js?v=3"></script>
+        <div class="workbench">
+          <section class="panel drawing-panel">
+            <div class="panel-head"><div><b>المخطط الأحادي — SLD</b><small id="viewerStatus">تم التحليل · الثقة 94%</small></div><div class="tool-row"><button id="zoomOut">−</button><span id="zoomValue">100%</span><button id="zoomIn">+</button><button id="fitBtn">ملاءمة</button></div></div>
+            <div class="canvas-wrap">
+              <div class="blueprint" id="blueprint">
+                <svg viewBox="0 0 900 590" role="img" aria-label="مخطط كهربائي أحادي تفاعلي">
+                  <defs><pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse"><path d="M20 0H0V20" fill="none" stroke="#dce6e9" stroke-width=".55"/></pattern><filter id="shadow"><feDropShadow dx="0" dy="3" stdDeviation="4" flood-opacity=".12"/></filter></defs>
+                  <rect width="900" height="590" fill="#fbfdfd"/><rect width="900" height="590" fill="url(#grid)"/>
+                  <g stroke="#213d48" stroke-width="3" fill="#fff" filter="url(#shadow)">
+                    <rect x="35" y="245" width="120" height="82" rx="5"/><rect x="230" y="245" width="125" height="82" rx="5"/>
+                    <rect x="465" y="55" width="135" height="76" rx="5"/><rect x="465" y="165" width="135" height="76" rx="5"/><rect x="465" y="275" width="135" height="76" rx="5"/><rect x="465" y="385" width="135" height="76" rx="5"/>
+                    <line x1="155" y1="286" x2="230" y2="286"/><line x1="355" y1="286" x2="410" y2="286"/><line x1="410" y1="93" x2="410" y2="423"/>
+                    <path d="M410 93H465M410 203H465M410 313H465M410 423H465"/>
+                    <path d="M600 93H735M600 203H735M600 313H735M600 423H735"/>
+                    <circle cx="770" cy="93" r="30"/><circle cx="770" cy="203" r="30"/><circle cx="770" cy="313" r="30"/><circle cx="770" cy="423" r="30"/>
+                  </g>
+                  <g fill="#213d48" font-family="Arial" text-anchor="middle"><text x="95" y="276" font-size="15">SEC SUPPLY</text><text x="95" y="300" font-size="13">400V · 3Φ · 50Hz</text><text x="292" y="276" font-size="15">MDB-01</text><text x="292" y="300" font-size="13">250A MCCB</text><text x="532" y="88" font-size="14">DB-L1</text><text x="532" y="111" font-size="12">63A · 16mm²</text><text x="532" y="198" font-size="14">DB-P1</text><text x="532" y="221" font-size="12">100A · 25mm²</text><text x="532" y="308" font-size="14">DB-HVAC</text><text x="532" y="331" font-size="12">125A · 25mm²</text><text x="532" y="418" font-size="14">DB-UPS</text><text x="532" y="441" font-size="12">80A · 25mm²</text><text x="770" y="98" font-size="13">45kW</text><text x="770" y="208" font-size="13">68kW</text><text x="770" y="318" font-size="13">82kW</text><text x="770" y="428" font-size="13">34kW</text></g>
+                  <g class="markers" id="markers"><g data-marker="1"><circle class="marker critical" cx="532" cy="313" r="17"/><text x="532" y="319">1</text></g><g data-marker="2"><circle class="marker warning" cx="292" cy="286" r="17"/><text x="292" y="292">2</text></g><g data-marker="3"><circle class="marker warning" cx="410" cy="93" r="17"/><text x="410" y="99">3</text></g></g>
+                  <text x="32" y="560" fill="#728892" font-family="Arial" font-size="12">MAEYAR AI · DEMO SINGLE LINE DIAGRAM · REV.03 · 2026</text>
+                </svg>
+              </div>
+              <div class="canvas-badge">AI <span>18 عنصرًا بثقة 94%</span></div>
+            </div>
+          </section>
+
+          <aside class="panel findings-panel">
+            <div class="panel-head"><div><b>سجل الملاحظات</b><small>مرتبة حسب الأولوية</small></div><button class="filter-btn">≡ تصفية</button></div>
+            <div class="finding-list" id="findingList"></div>
+          </aside>
+        </div>
+
+        <section class="panel engineering">
+          <div class="panel-head engineering-head"><div><b>ورقة الحسابات الهندسية</b><small>عدّل القيم وشاهد قرار محرك القواعد فورًا</small></div><div class="status-pill"><span></span> محرك القواعد متصل</div></div>
+          <div class="table-wrap"><table><thead><tr><th>الدائرة</th><th>الحمل kW</th><th>الجهد V</th><th>الطول m</th><th>الكابل mm²</th><th>القاطع A</th><th>تيار التصميم</th><th>هبوط الجهد</th><th>القرار</th></tr></thead><tbody id="calcRows"></tbody></table></div>
+          <div class="calc-footer"><span>ℹ الحسابات تجريبية وفق نموذج ثلاثي الطور ومعامل قدرة 0.90. الحدود قابلة للتهيئة من نسخة الكود المرخصة.</span><button id="recalculate">↻ إعادة الاحتساب</button></div>
+        </section>
+      </section>
+
+      <section class="view placeholder-view" id="projectsView"><div class="empty-product"><span>▦</span><h2>محفظة المشاريع</h2><p>لوحة لمتابعة حالة جميع عمليات التدقيق والإصدارات والاعتمادات.</p><div class="project-demo"><b>برج الأعمال — الرياض</b><span>قيد المراجعة</span><em>72%</em></div><div class="project-demo"><b>مجمع سكني — جدة</b><span class="approved">معتمد</span><em>96%</em></div></div></section>
+      <section class="view placeholder-view" id="rulesView"><div class="rules-library"><div class="library-head"><div><span class="eyebrow">Rule Engine</span><h2>مكتبة قواعد SBC 401</h2><p>قواعد قابلة للإصدار والتتبع، مع فصل نص الكود المرخص عن منطق التحقق.</p></div><b>24 قاعدة نشطة</b></div><div id="rulesGrid"></div></div></section>
+      <section class="view placeholder-view" id="reportsView"><div class="empty-product"><span>▤</span><h2>مركز التقارير</h2><p>تقارير الامتثال، سجل القرارات، وإصدارات المخطط في مكان واحد.</p><button class="primary" id="reportCenterPrint">إنشاء تقرير المراجعة الحالي</button></div></section>
+    </main>
+  </div>
+
+  <div class="drawer" id="findingDrawer" aria-hidden="true"><div class="drawer-card"><button class="drawer-close" id="drawerClose">×</button><div id="drawerContent"></div></div></div>
+  <div class="modal" id="modal" aria-hidden="true"><div class="modal-card"><button id="closeModal">×</button><span class="brand-mark">م</span><h2>مِعيار AI</h2><p>منصة سعودية للتدقيق الكهربائي تجمع استخراج عناصر المخطط، الحسابات الهندسية، ومحرك امتثال قابل للتفسير.</p><div class="architecture"><span>PDF / CAD</span><i>←</i><span>استخراج ذكي</span><i>←</i><span>محرك قواعد</span><i>←</i><span>اعتماد مهندس</span></div><small>نموذج هاكاثون — لا يستبدل مراجعة واعتماد المهندس المرخّص.</small></div></div>
+  <div class="toast" id="toast">تم تحديث الحسابات والنتائج</div>
+  <script src="app.js?v=10"></script>
 </body>
 </html>
