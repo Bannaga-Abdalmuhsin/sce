@@ -8,7 +8,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=11">
+  <link rel="stylesheet" href="styles.css?v=13">
 </head>
 <body>
   <div class="app-shell">
@@ -29,7 +29,7 @@
     <main class="main">
       <header class="topbar">
         <div><p class="crumb">المشاريع / برج الأعمال — الرياض /</p><h1>مراجعة المخطط الكهربائي</h1></div>
-        <div class="top-actions"><span class="autosave">✓ تم الحفظ الآن</span><button class="language-btn" id="langBtn" aria-label="Switch language">EN</button><button class="ghost" id="helpBtn">عن الحل</button><button class="primary small" id="exportTop">تصدير التقرير</button></div>
+        <div class="top-actions"><span class="autosave">✓ تم الحفظ الآن</span><button class="language-btn" id="langBtn" aria-label="Switch language">EN</button><button class="ghost" id="helpBtn">عن الحل</button><button class="ghost new-assessment" id="newAssessmentBtn">＋ تدقيق جديد</button><button class="primary small" id="exportTop">تصدير التقرير</button></div>
       </header>
 
       <section class="project-strip">
@@ -44,6 +44,7 @@
       </section>
 
       <section class="view active" id="auditView">
+        <div class="assessment-empty" id="assessmentEmpty" hidden><span>＋</span><div><b>ابدأ تقييمًا هندسيًا جديدًا</b><small>أدخل بيانات المشروع وارفع المخطط لبدء الاستخراج والتدقيق.</small></div><button class="primary" id="emptyStartBtn">إنشاء تقييم جديد</button></div>
         <div class="kpi-grid">
           <article><span class="kpi-icon cyan">⌁</span><div><small>العناصر المستخرجة</small><b>18</b><em>6 لوحات · 12 دائرة</em></div></article>
           <article><span class="kpi-icon green">✓</span><div><small>القواعد المجتازة</small><b id="passKpi">19</b><em>من أصل 24 قاعدة</em></div></article>
@@ -96,8 +97,9 @@
   </div>
 
   <div class="drawer" id="findingDrawer" aria-hidden="true"><div class="drawer-card"><button class="drawer-close" id="drawerClose">×</button><div id="drawerContent"></div></div></div>
+  <div class="modal" id="newAssessmentModal" aria-hidden="true"><form class="modal-card assessment-form" id="assessmentForm"><button type="button" id="closeAssessmentModal">×</button><span class="form-kicker">NEW ASSESSMENT</span><h2>تقييم هندسي جديد</h2><p>أنشئ مساحة مستقلة للمخطط الجديد. لن تظهر نتائج التقرير السابق بعد بدء التقييم.</p><div class="form-grid"><label><span>اسم المشروع</span><input id="newProjectName" required placeholder="مثال: برج الأعمال — الرياض"></label><label><span>المدينة</span><input id="newProjectCity" required placeholder="الرياض"></label><label><span>نوع المبنى</span><select id="newProjectType"><option>مبنى تجاري</option><option>مبنى سكني</option><option>منشأة صناعية</option><option>مرفق اتصالات</option></select></label><label><span>إصدار المخطط</span><input id="newRevision" value="Rev.01"></label></div><label class="assessment-upload"><input id="newDrawingFile" type="file" accept=".pdf,.dwg,.dxf,image/*"><span>↥</span><b id="uploadLabel">اختر مخطط PDF / DWG / DXF</b><small>للنموذج التجريبي يمكن المتابعة دون ملف</small></label><div class="form-actions"><button type="button" class="ghost" id="cancelAssessment">إلغاء</button><button type="submit" class="primary" id="startAssessment">إنشاء وبدء التحليل</button></div></form></div>
   <div class="modal" id="modal" aria-hidden="true"><div class="modal-card"><button id="closeModal">×</button><span class="brand-mark">م</span><h2>مِعيار AI</h2><p>منصة سعودية للتدقيق الكهربائي تجمع استخراج عناصر المخطط، الحسابات الهندسية، ومحرك امتثال قابل للتفسير.</p><div class="architecture"><span>PDF / CAD</span><i>←</i><span>استخراج ذكي</span><i>←</i><span>محرك قواعد</span><i>←</i><span>اعتماد مهندس</span></div><small>نموذج هاكاثون — لا يستبدل مراجعة واعتماد المهندس المرخّص.</small></div></div>
   <div class="toast" id="toast">تم تحديث الحسابات والنتائج</div>
-  <script src="app.js?v=11"></script>
+  <script src="app.js?v=13"></script>
 </body>
 </html>
