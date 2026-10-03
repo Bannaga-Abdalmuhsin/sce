@@ -1,0 +1,11 @@
+import { cp, mkdir, rm, readFile, writeFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+const check = spawnSync('npm', ['run', 'typecheck'], { stdio: 'inherit' });
+if (check.status !== 0) process.exit(check.status || 1);
+await rm('dist', { recursive:true, force:true });
+await mkdir('dist', { recursive:true });
+for (const file of ['index.html', 'styles.css', 'app.js', 'src']) await cp(file, `dist/${file}`, { recursive:true });
+await writeFile('dist/.nojekyll', '');
+const html = await readFile('dist/index.html', 'utf8');
+if (!html.includes('type="module"')) throw new Error('Entry point must use ES modules');
+console.log('Production static build complete: dist/ (relative assets, hash routing, GitHub Pages compatible)');

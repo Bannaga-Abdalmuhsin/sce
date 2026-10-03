@@ -1,60 +1,589 @@
-const $=s=>document.querySelector(s),$$=s=>[...document.querySelectorAll(s)];
-let currentLang=localStorage.getItem('maeyar-language')||'ar';
-const defaultCircuits=[
- {id:'DB-L1',load:45,voltage:400,length:42,cable:16,breaker:63,marker:null},
- {id:'DB-P1',load:68,voltage:400,length:61,cable:25,breaker:100,marker:null},
- {id:'DB-HVAC',load:82,voltage:400,length:78,cable:25,breaker:125,marker:'1'},
- {id:'DB-UPS',load:34,voltage:400,length:88,cable:25,breaker:80,marker:null}
-];
-const circuits=defaultCircuits.map(c=>({...c}));
-const findings=[
- {id:'F-001',type:'critical',label:'حرج',title:'عدم تنسيق القاطع مع سعة الكابل',summary:'القاطع 125A يتجاوز السعة التجريبية المعتمدة لموصل 25mm².',location:'DB-HVAC',marker:'1',rule:'SBC401-OCP-07',confidence:'97%',evidence:[['القاطع','125 A'],['الكابل','25 mm²'],['تيار التصميم','131.5 A'],['حالة القاعدة','غير مجتاز']],detail:'أظهر الاستخراج أن القاطع المغذي للوحة DB-HVAC بسعة 125A مع موصل 25mm². يجب التحقق من طريقة التمديد ودرجة الحرارة والتجميع قبل الاعتماد.',fix:'إعادة اختيار القاطع والكابل بعد حساب معاملات التخفيض، أو زيادة مساحة المقطع بما يحقق التنسيق الانتقائي والحماية.'},
- {id:'F-002',type:'warning',label:'مراجعة',title:'هامش السعة الرئيسية منخفض',summary:'إجمالي الطلب المحسوب يترك هامشًا تشغيليًا محدودًا.',location:'MDB-01',marker:'2',rule:'SBC401-LOAD-03',confidence:'92%',evidence:[['إجمالي الحمل','229 kW'],['القاطع الرئيسي','250 A'],['عامل الطلب','0.72'],['الهامش','8%']],detail:'تشير بيانات المخطط إلى هامش محدود بين الطلب التقديري والسعة الرئيسية، وقد يؤثر ذلك على التوسع أو ظروف التشغيل القصوى.',fix:'تأكيد عوامل الطلب الفعلية وجدول الأحمال، ثم توثيق هامش التوسع أو إعادة تحديد السعة الرئيسية.'},
- {id:'F-003',type:'warning',label:'مراجعة',title:'بيانات التأريض غير مكتملة',summary:'مقطع موصل الحماية ونقطة الربط الرئيسية غير موضحين.',location:'خط التوزيع',marker:'3',rule:'SBC401-GND-02',confidence:'89%',evidence:[['موصل PE','غير ظاهر'],['قضيب الأرضي','غير موضح'],['نقطة الربط','غير محددة'],['الحالة','بيانات ناقصة']],detail:'لم يتعرف النموذج على مقطع موصل التأريض أو نقطة الربط الرئيسية في المخطط المرفوع.',fix:'إضافة مقاطع موصلات التأريض والربط، وتوضيح نقطة الربط الرئيسية ورمز نظام التأريض.'},
- {id:'F-004',type:'warning',label:'مراجعة',title:'هبوط جهد يحتاج تحققًا',summary:'الدائرة DB-UPS تقترب من حد المشروع المحدد.',location:'DB-UPS',marker:null,rule:'SBC401-VD-01',confidence:'95%',evidence:[['الطول','88 m'],['الكابل','25 mm²'],['الحمل','34 kW'],['النتيجة','2.1%']],detail:'الحساب الأولي لهبوط الجهد يقترب من الحد الداخلي للمشروع. النتيجة تتغير حسب معامل القدرة ونوع الموصل وطريقة التمديد.',fix:'تأكيد طول المسار ومعامل القدرة، والنظر في زيادة مقطع الموصل إذا تجاوزت النتيجة حد التصميم.'}
-];
-const rules=[
- ['SBC401-OCP-07','تنسيق وسيلة الحماية مع الموصل','يتحقق من علاقة تيار التصميم وسعة القاطع والسعة المصححة للموصل.','حماية','حرج'],
- ['SBC401-LOAD-03','سعة المغذي وعامل الطلب','يقارن الطلب المحسوب بسعة المغذي والهامش التشغيلي.','أحمال','تحذير'],
- ['SBC401-GND-02','اكتمال التأريض والربط','يتحقق من وجود موصل PE ونقطة الربط والبيانات المطلوبة.','تأريض','حرج'],
- ['SBC401-VD-01','هبوط الجهد','يحسب الهبوط للدائرة ويقارنه بحد المشروع القابل للتهيئة.','كابلات','تحذير'],
- ['SBC401-LBL-04','وسم اللوحات والدوائر','يفحص اكتمال وتفرّد معرفات اللوحات والدوائر.','توثيق','متوسط'],
- ['SBC401-SC-05','قدرة القطع','يقارن قدرة القطع المحددة بتيار القصر المتوقع.','حماية','حرج']
-];
-let zoom=1,resolved=new Set(),assessmentActive=true;
+import {
+  createAssessment, setProject, attachDrawing, analyzeAssessment, updateEquipment,
+  reviewFinding, addComment, signOff, newAssessment, demoAssessment, dashboardStats,
+  persistWorkspace, restoreWorkspace, WORKSPACE_KEY
+} from './src/core/assessment.js';
+import { RULES, DEMO_DISCLAIMER } from './src/core/rules.js';
+import { calculateEquipment } from './src/core/calculations.js';
+import { generateReport, downloadReport } from './src/core/report.js';
+import { tr, esc, bilingual } from './src/ui/i18n.js';
 
-function currentCalc(c){const current=c.load*1000/(Math.sqrt(3)*c.voltage*.9);const vd=(Math.sqrt(3)*current*c.length*.018)/(c.cable*c.voltage)*100;const ampacity={16:76,25:101,35:125,50:151,70:192}[c.cable]||c.cable*3.5;let state='pass',label='مجتاز';if(current>ampacity||c.breaker>ampacity){state='fail';label='غير مجتاز'}else if(vd>2){state='review';label='مراجعة'}return{current,vd,ampacity,state,label}}
-function renderTable(){const body=$('#calcRows');body.innerHTML=circuits.map((c,i)=>{const r=currentCalc(c);return `<tr data-row="${i}"><td>${c.id}</td><td><input class="cell-input" data-key="load" type="number" value="${c.load}"></td><td><input class="cell-input" data-key="voltage" type="number" value="${c.voltage}"></td><td><input class="cell-input" data-key="length" type="number" value="${c.length}"></td><td><input class="cell-input" data-key="cable" type="number" value="${c.cable}"></td><td><input class="cell-input" data-key="breaker" type="number" value="${c.breaker}"></td><td>${r.current.toFixed(1)} A</td><td>${r.vd.toFixed(2)}%</td><td><span class="decision ${r.state}">● ${r.label}</span></td></tr>`}).join('');$$('.cell-input').forEach(input=>input.onchange=e=>{const row=Number(e.target.closest('tr').dataset.row);circuits[row][e.target.dataset.key]=Number(e.target.value);renderTable();updateScore();showToast('تم تحديث الحسابات والنتائج')});syncDynamicLanguage()}
-function renderFindings(){const list=$('#findingList');if(!assessmentActive){list.innerHTML='<div class="empty-product"><span>＋</span><h2>لا يوجد تقرير نشط</h2><p>ابدأ تقييمًا جديدًا لعرض نتائج الامتثال.</p></div>';syncDynamicLanguage();return}const visible=findings.filter(f=>!resolved.has(f.id));list.innerHTML=visible.map(f=>`<article class="finding-card" data-id="${f.id}"><div class="finding-top"><span class="badge ${f.type}">${f.label}</span><small>${f.id}</small></div><h3>${f.title}</h3><p>${f.summary}</p><div class="finding-ref"><span>${f.rule} · ${f.location}</span><button data-locate="${f.marker||''}">عرض التفاصيل ←</button></div></article>`).join('')+`<article class="finding-card"><div class="finding-top"><span class="badge passed">مجتاز</span><small>19 قاعدة</small></div><h3>الفحوصات المطابقة</h3><p>اجتازت قواعد التعريفات، الاتساق، القطبية، والتوثيق الأولي.</p></article>`;$$('.finding-card[data-id]').forEach(card=>card.onclick=e=>{const f=findings.find(x=>x.id===card.dataset.id);openFinding(f);if(f.marker)locate(f.marker)});updateScore();syncDynamicLanguage()}
-function updateScore(){if(!assessmentActive){$('#headerScore').textContent='—';$('#criticalKpi').textContent='0';$('#warningKpi').textContent='0';$('#passKpi').textContent='0';return}const calcFails=circuits.map(currentCalc).filter(x=>x.state==='fail').length;const calcReviews=circuits.map(currentCalc).filter(x=>x.state==='review').length;const critical=findings.filter(f=>f.type==='critical'&&!resolved.has(f.id)).length+Math.max(0,calcFails-1);const warnings=findings.filter(f=>f.type==='warning'&&!resolved.has(f.id)).length+calcReviews;const score=Math.max(40,100-critical*18-warnings*3);$('#headerScore').textContent=score+'%';$('#criticalKpi').textContent=critical;$('#warningKpi').textContent=warnings;$('#passKpi').textContent=Math.max(0,24-critical-warnings)}
-function openFinding(f){$('#drawerContent').innerHTML=`<span class="badge ${f.type}">${f.label}</span><p class="detail-label">${f.id} · ثقة الاستخراج ${f.confidence}</p><h2 class="detail-title">${f.title}</h2><div class="detail-block"><b>لماذا ظهرت الملاحظة؟</b><p>${f.detail}</p></div><div class="evidence-grid">${f.evidence.map(e=>`<div><small>${e[0]}</small><b>${e[1]}</b></div>`).join('')}</div><div class="detail-block"><b>الإجراء التصحيحي المقترح</b><p>${f.fix}</p></div><div class="detail-block"><b>مرجع القاعدة</b><p>${f.rule} · SBC 401-2024<br><small>رقم البند الرسمي يربط بعد ترخيص محتوى الكود والتحقق الهندسي.</small></p></div><div class="review-actions"><button data-action="note">إضافة تعليق</button><button data-action="accept">قبول الملاحظة</button><button class="resolve" data-action="resolve">تمييز كمعالج</button></div>`;$('#findingDrawer').classList.add('open');$('#findingDrawer').setAttribute('aria-hidden','false');$('[data-action="resolve"]').onclick=()=>{resolved.add(f.id);closeDrawer();renderFindings();showToast('تم تسجيل الملاحظة كمعالجة')};$('[data-action="accept"]').onclick=()=>showToast('تم اعتماد الملاحظة في سجل المراجعة');$('[data-action="note"]').onclick=()=>showToast('تمت إضافة خانة تعليق للمهندس')}
-function closeDrawer(){$('#findingDrawer').classList.remove('open');$('#findingDrawer').setAttribute('aria-hidden','true')}
-function locate(marker){if(!marker)return;const g=$(`[data-marker="${marker}"]`);if(!g)return;const c=g.querySelector('circle');c.classList.remove('pulse');void c.getBoundingClientRect();c.classList.add('pulse');$('#blueprint').scrollIntoView({behavior:'smooth',block:'center'})}
-function showToast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(showToast.timer);showToast.timer=setTimeout(()=>t.classList.remove('show'),2200)}
-function renderRules(){$('#rulesGrid').innerHTML=rules.map(r=>`<article class="rule-card"><header><code>${r[0]}</code><span class="live-dot"></span></header><h3>${r[1]}</h3><p>${r[2]}</p><footer><span>${r[3]}</span><span>الأولوية: ${r[4]}</span><span>v2024.1</span></footer></article>`).join('')}
-function changeView(name){$$('.view').forEach(v=>v.classList.remove('active'));$$('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===name));$('#'+name+'View').classList.add('active');if(name==='rules')renderRules()}
-$$('.nav-item').forEach(n=>n.onclick=()=>changeView(n.dataset.view));
-$('#drawerClose').onclick=closeDrawer;$('#findingDrawer').onclick=e=>{if(e.target.id==='findingDrawer')closeDrawer()};
-$('#zoomIn').onclick=()=>{zoom=Math.min(1.5,zoom+.1);applyZoom()};$('#zoomOut').onclick=()=>{zoom=Math.max(.7,zoom-.1);applyZoom()};$('#fitBtn').onclick=()=>{zoom=1;applyZoom()};function applyZoom(){$('#blueprint').style.transform=`scale(${zoom})`;$('#zoomValue').textContent=Math.round(zoom*100)+'%'}
-$('#recalculate').onclick=()=>{renderTable();updateScore();showToast('أُعيد تشغيل 24 قاعدة بنجاح')};
-function printReport(){changeView('audit');setTimeout(()=>window.print(),120)}$('#exportTop').onclick=printReport;$('#reportCenterPrint').onclick=printReport;
-const modal=$('#modal');function openModal(){modal.classList.add('open');modal.setAttribute('aria-hidden','false')}function closeModal(){modal.classList.remove('open');modal.setAttribute('aria-hidden','true')}$('#helpBtn').onclick=openModal;$('#closeModal').onclick=closeModal;modal.onclick=e=>{if(e.target===modal)closeModal()};
-const assessmentModal=$('#newAssessmentModal');
-function openAssessmentModal(){assessmentModal.classList.add('open');assessmentModal.setAttribute('aria-hidden','false');setTimeout(()=>$('#newProjectName').focus(),50)}
-function closeAssessmentModal(){assessmentModal.classList.remove('open');assessmentModal.setAttribute('aria-hidden','true')}
-function resetAssessment(){assessmentActive=false;sessionStorage.setItem('maeyar-assessment','blank');resolved.clear();circuits.splice(0);renderTable();renderFindings();updateScore();$('#assessmentEmpty').hidden=false;$('#extractedKpi').textContent='0';$('#extractedDetail').textContent='لا يوجد مخطط';$('#canvasBadgeText').textContent='بانتظار مخطط';$('.project-id b').textContent='—';$('.project-id small').textContent='لم يتم إنشاء تقييم';$('.crumb').textContent='المشاريع / تقييم جديد /';$$('.drawing-panel,.engineering').forEach(p=>p.classList.add('disabled-panel'));$('#blueprint').style.opacity='0';$('#blueprint').style.visibility='hidden';$('#viewerStatus').textContent='بانتظار مخطط جديد';$('#exportTop').disabled=true;$('#newDrawingFile').value='';$('#uploadLabel').textContent='اختر مخطط PDF / DWG / DXF';syncDynamicLanguage()}
-function beginNewAssessment(){changeView('audit');resetAssessment();openAssessmentModal()}
-$('#newAssessmentBtn').onclick=beginNewAssessment;$('#emptyStartBtn').onclick=openAssessmentModal;$('#closeAssessmentModal').onclick=closeAssessmentModal;$('#cancelAssessment').onclick=closeAssessmentModal;assessmentModal.onclick=e=>{if(e.target===assessmentModal)closeAssessmentModal()};
-$('#newDrawingFile').onchange=e=>{$('#uploadLabel').textContent=e.target.files[0]?.name||'اختر مخطط PDF / DWG / DXF'};
-$('#assessmentForm').onsubmit=e=>{e.preventDefault();const name=$('#newProjectName').value.trim(),city=$('#newProjectCity').value.trim(),type=$('#newProjectType').value,rev=$('#newRevision').value.trim();assessmentActive=true;sessionStorage.setItem('maeyar-assessment','active');circuits.push(...defaultCircuits.map(c=>({...c})));resolved.clear();closeAssessmentModal();$('#assessmentEmpty').hidden=true;$('#extractedKpi').textContent='0';$('#extractedDetail').textContent='جارٍ الاستخراج';$('#canvasBadgeText').textContent='جارٍ تحليل المخطط';$$('.drawing-panel,.engineering').forEach(p=>p.classList.remove('disabled-panel'));$('#blueprint').style.visibility='visible';$('#blueprint').style.opacity='.3';$('#viewerStatus').textContent='جارٍ استخراج عناصر المخطط...';$('#exportTop').disabled=true;$('.project-id b').textContent='SCE-'+String(Date.now()).slice(-6);$('.project-id small').textContent=`${type} · ${rev}`;$('.crumb').textContent=`المشاريع / ${name} — ${city} /`;showToast('بدأ تحليل المخطط الجديد');setTimeout(()=>{$('#blueprint').style.opacity='1';$('#viewerStatus').textContent='تم التحليل · الثقة 94%';$('#extractedKpi').textContent='18';$('#extractedDetail').textContent='6 لوحات · 12 دائرة';$('#canvasBadgeText').textContent='18 عنصرًا بثقة 94%';renderTable();renderFindings();updateScore();$('#exportTop').disabled=false;showToast('اكتمل التقييم الهندسي الجديد')},1400)};
-document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeModal();closeDrawer();closeAssessmentModal()}});
+const $ = (selector, root=document) => root.querySelector(selector);
+const $$ = (selector, root=document) => [...root.querySelectorAll(selector)];
+const MAX_FILE_BYTES = 20 * 1024 * 1024;
+const validExtensions = new Set(['pdf','dwg','dxf']);
+let lang = localStorage.getItem('maeyar-language') === 'en' ? 'en' : 'ar';
+let workspace, history = [], currentView = 'dashboard', selectedFile = null, pdfUrl = null, reportUrl = null;
+let isPresentation = false, presentationStep = 0, presentationTimer = null, generation = 0, zoom = 1;
+let lastErrorRetry = null, storageFailed = false;
 
-const en={
-'مساحة التدقيق':'Audit workspace','المشاريع':'Projects','مكتبة القواعد':'Rule library','التقارير':'Reports','حزمة قواعد نشطة · تجريبية':'Active rule pack · Demo','م. عبدالمحسن':'Eng. Abdalmuhsin','مهندس مراجع':'Review engineer','المشاريع / برج الأعمال — الرياض /':'Projects / Business Tower — Riyadh /','مراجعة المخطط الكهربائي':'Electrical drawing review','✓ تم الحفظ الآن':'✓ Saved just now','عن الحل':'About','تصدير التقرير':'Export report','مبنى تجاري · إصدار المخطط Rev.03':'Commercial building · Drawing Rev.03','بيانات المشروع':'Project data','استخراج العناصر':'Element extraction','التدقيق والحسابات':'Audit & calculations','المراجعة والاعتماد':'Review & approval','درجة الامتثال':'Compliance score','العناصر المستخرجة':'Extracted elements','6 لوحات · 12 دائرة':'6 panels · 12 circuits','القواعد المجتازة':'Passed rules','من أصل 24 قاعدة':'of 24 rules','مخالفات حرجة':'Critical violations','تتطلب إجراءً':'Action required','تحتاج مراجعة':'Needs review','قرار المهندس مطلوب':'Engineer decision required','المخطط الأحادي — SLD':'Single-line diagram — SLD','تم التحليل · الثقة 94%':'Analyzed · 94% confidence','ملاءمة':'Fit','18 عنصرًا بثقة 94%':'18 elements · 94% confidence','سجل الملاحظات':'Findings register','مرتبة حسب الأولوية':'Prioritized by severity','≡ تصفية':'≡ Filter','ورقة الحسابات الهندسية':'Engineering calculation sheet','عدّل القيم وشاهد قرار محرك القواعد فورًا':'Edit values and see rule decisions instantly','محرك القواعد متصل':'Rule engine connected','الدائرة':'Circuit','الحمل kW':'Load kW','الجهد V':'Voltage V','الطول m':'Length m','الكابل mm²':'Cable mm²','القاطع A':'Breaker A','تيار التصميم':'Design current','هبوط الجهد':'Voltage drop','القرار':'Decision','ℹ الحسابات تجريبية وفق نموذج ثلاثي الطور ومعامل قدرة 0.90. الحدود قابلة للتهيئة من نسخة الكود المرخصة.':'ℹ Demo calculations use a three-phase model and 0.90 power factor. Limits are configurable from the licensed code.','↻ إعادة الاحتساب':'↻ Recalculate','مجتاز':'Passed','غير مجتاز':'Failed','مراجعة':'Review','حرج':'Critical','عدم تنسيق القاطع مع سعة الكابل':'Breaker and cable capacity mismatch','القاطع 125A يتجاوز السعة التجريبية المعتمدة لموصل 25mm².':'The 125A breaker exceeds the demo capacity assigned to a 25mm² conductor.','هامش السعة الرئيسية منخفض':'Low main-capacity margin','إجمالي الطلب المحسوب يترك هامشًا تشغيليًا محدودًا.':'Calculated demand leaves limited operating margin.','بيانات التأريض غير مكتملة':'Incomplete grounding data','مقطع موصل الحماية ونقطة الربط الرئيسية غير موضحين.':'Protective conductor size and main bonding point are not shown.','هبوط جهد يحتاج تحققًا':'Voltage drop requires verification','الدائرة DB-UPS تقترب من حد المشروع المحدد.':'DB-UPS is approaching the configured project limit.','عرض التفاصيل ←':'View details →','الفحوصات المطابقة':'Compliant checks','اجتازت قواعد التعريفات، الاتساق، القطبية، والتوثيق الأولي.':'Identification, consistency, polarity, and documentation checks passed.','قاعدة':'rule','محفظة المشاريع':'Project portfolio','لوحة لمتابعة حالة جميع عمليات التدقيق والإصدارات والاعتمادات.':'Track all audits, revisions, and approvals.','برج الأعمال — الرياض':'Business Tower — Riyadh','قيد المراجعة':'Under review','مجمع سكني — جدة':'Residential Complex — Jeddah','معتمد':'Approved','مكتبة قواعد SBC 401':'SBC 401 rule library','قواعد قابلة للإصدار والتتبع، مع فصل نص الكود المرخص عن منطق التحقق.':'Versioned, traceable rules that separate licensed code text from verification logic.','24 قاعدة نشطة':'24 active rules','مركز التقارير':'Report center','تقارير الامتثال، سجل القرارات، وإصدارات المخطط في مكان واحد.':'Compliance reports, decision logs, and drawing revisions in one place.','إنشاء تقرير المراجعة الحالي':'Generate current review report','منصة سعودية للتدقيق الكهربائي تجمع استخراج عناصر المخطط، الحسابات الهندسية، ومحرك امتثال قابل للتفسير.':'A Saudi electrical-audit platform combining drawing extraction, engineering calculations, and an explainable compliance engine.','نموذج هاكاثون — لا يستبدل مراجعة واعتماد المهندس المرخّص.':'Hackathon prototype — not a substitute for review and approval by a licensed engineer.','تم تحديث الحسابات والنتائج':'Calculations and results updated','لماذا ظهرت الملاحظة؟':'Why was this finding raised?','الإجراء التصحيحي المقترح':'Recommended corrective action','مرجع القاعدة':'Rule reference','إضافة تعليق':'Add comment','قبول الملاحظة':'Accept finding','تمييز كمعالج':'Mark resolved'
-};
-Object.assign(en,{'＋ تدقيق جديد':'＋ New assessment','ابدأ تقييمًا هندسيًا جديدًا':'Start a new engineering assessment','أدخل بيانات المشروع وارفع المخطط لبدء الاستخراج والتدقيق.':'Enter project details and upload the drawing to begin extraction and auditing.','إنشاء تقييم جديد':'Create new assessment','تقييم هندسي جديد':'New engineering assessment','أنشئ مساحة مستقلة للمخطط الجديد. لن تظهر نتائج التقرير السابق بعد بدء التقييم.':'Create a clean workspace for the new drawing. Previous report results will not appear.','اسم المشروع':'Project name','المدينة':'City','نوع المبنى':'Building type','إصدار المخطط':'Drawing revision','اختر مخطط PDF / DWG / DXF':'Choose PDF / DWG / DXF drawing','يلزم رفع مخطط جديد لبدء التحليل':'A new drawing is required to start analysis','إلغاء':'Cancel','إنشاء وبدء التحليل':'Create and start analysis','لا يوجد تقرير نشط':'No active report','ابدأ تقييمًا جديدًا لعرض نتائج الامتثال.':'Start a new assessment to display compliance results.','بانتظار مخطط جديد':'Waiting for a new drawing','لا يوجد مخطط':'No drawing','بانتظار مخطط':'Waiting for drawing','لم يتم إنشاء تقييم':'No assessment created','المشاريع / تقييم جديد /':'Projects / New assessment /','جارٍ الاستخراج':'Extracting','جارٍ تحليل المخطط':'Analyzing drawing','جارٍ استخراج عناصر المخطط...':'Extracting drawing elements...','بدأ تحليل المخطط الجديد':'New drawing analysis started','اكتمل التقييم الهندسي الجديد':'New engineering assessment completed'});
-const ar=Object.fromEntries(Object.entries(en).map(([a,e])=>[e,a]));
-function translateText(lang){const map=lang==='en'?en:ar;const walker=document.createTreeWalker(document.body,NodeFilter.SHOW_TEXT);let node;while(node=walker.nextNode()){const raw=node.nodeValue,trim=raw.trim();if(map[trim])node.nodeValue=raw.replace(trim,map[trim])}document.documentElement.lang=lang;document.documentElement.dir=lang==='en'?'ltr':'rtl';document.title=lang==='en'?'Maeyar AI | Electrical Compliance Platform':'مِعيار AI | منصة الامتثال الكهربائي';$('#langBtn').textContent=lang==='en'?'ع':'EN'}
-function syncDynamicLanguage(){if(currentLang==='en')queueMicrotask(()=>translateText('en'))}
-$('#langBtn').onclick=()=>{currentLang=currentLang==='ar'?'en':'ar';localStorage.setItem('maeyar-language',currentLang);translateText(currentLang)};
-renderTable();renderFindings();translateText(currentLang);if(sessionStorage.getItem('maeyar-assessment')==='blank')resetAssessment();
+function initWorkspace() {
+  try {
+    const restored = restoreWorkspace(localStorage);
+    workspace = restored?.assessment ?? createAssessment();
+    history = Array.isArray(restored?.history) ? restored.history : [];
+  } catch (error) {
+    workspace = createAssessment();
+    history = [];
+    showStorageWarning(error);
+  }
+}
+function message(key) { return tr(key, lang); }
+function time(value) {
+  if (!value) return '—';
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? String(value) : new Intl.DateTimeFormat(lang === 'ar' ? 'ar-SA' : 'en-GB',{dateStyle:'medium',timeStyle:'short'}).format(d);
+}
+function sizeLabel(bytes=0) { return bytes < 1024*1024 ? `${(bytes/1024).toFixed(1)} KB` : `${(bytes/1024/1024).toFixed(2)} MB`; }
+function statusLabel(stage) {
+  return message(({project:'statusProject',upload:'statusUpload',ready:'statusReady',review:'statusReview',completed:'statusCompleted'})[stage] || 'statusWaiting');
+}
+function showToast(text) {
+  const toast=$('#toast'); toast.textContent=text; toast.classList.add('show');
+  clearTimeout(showToast.timer); showToast.timer=setTimeout(()=>toast.classList.remove('show'),2600);
+}
+function showError(error, retry=null) {
+  const banner=$('#errorBanner');
+  $('#errorMessage').textContent = error?.message || message('analysisError');
+  banner.classList.add('show'); lastErrorRetry=retry;
+}
+function hideError(){ $('#errorBanner').classList.remove('show'); }
+function showStorageWarning(error) {
+  storageFailed=true;
+  $('#saveState').textContent=message('saveWarning');
+  $('#saveState').title=error?.message || '';
+}
+function guarded(fn) {
+  return (...args) => {
+    try { return fn(...args); }
+    catch (error) { console.error('Maeyar UI action failed',error); showError(error); }
+  };
+}
+function persist() {
+  if (isPresentation || workspace?.demo) return;
+  try {
+    persistWorkspace(localStorage,workspace,history);
+    storageFailed=false;
+    $('#saveState').textContent=message('localWorkspace');
+  } catch(error) { showStorageWarning(error); }
+}
+function revokePreview() {
+  if (pdfUrl) URL.revokeObjectURL(pdfUrl);
+  if (reportUrl) URL.revokeObjectURL(reportUrl);
+  pdfUrl=null; reportUrl=null; selectedFile=null;
+  const input=$('#drawingFile'); if(input) input.value='';
+  const name=$('#selectedFileName'); if(name) name.textContent='';
+}
+function openModal(id) {
+  const modal=$(`#${id}`); if(!modal)return;
+  modal.classList.add('open'); modal.setAttribute('aria-hidden','false');
+  const focusable=$('input:not([type=file]),button,select,textarea',modal); focusable?.focus();
+  modal.dataset.returnFocus=document.activeElement?.id || '';
+}
+function closeModal(modal) {
+  if(!modal)return;
+  modal.classList.remove('open'); modal.setAttribute('aria-hidden','true');
+  const previous=modal.dataset.returnFocus && $(`#${modal.dataset.returnFocus}`);
+  previous?.focus();
+}
+function closeDrawer() {
+  $('#findingDrawer').classList.remove('open'); $('#findingDrawer').setAttribute('aria-hidden','true');
+  $('#drawerContent').replaceChildren();
+}
+function safePersistNew(previous) {
+  const result = newAssessment(previous,history);
+  workspace=result.assessment;
+  history=result.history;
+  persist();
+}
+function startFresh() {
+  generation++;
+  clearTimeout(presentationTimer);
+  revokePreview();
+  closeDrawer();
+  ['assessmentModal','confirmModal','aboutModal'].forEach(id=>closeModal($(`#${id}`)));
+  $('#analysisProgress').classList.add('hidden');
+  $('#assessmentForm').reset();
+  $('#revision').value='Rev.01';
+  $('#projectTypeCommercial')?.removeAttribute('selected');
+  $('#workspaceFindings,#sldSection,#equipmentSection,#drawingSection,#signoffSection').forEach?.(()=>{});
+  safePersistNew(workspace);
+  storageFailed=false;
+  switchView('workspace');
+  hideError();
+  render();
+}
+function requestNewAssessment() {
+  if (workspace?.dirty || (workspace?.stage && workspace.stage !== 'project' && workspace.stage !== 'completed')) {
+    $('#confirmMessage').textContent=`${message('newAssessmentConfirm')} ${message('dirtyWarning')} ${message('resetSafe')}`;
+    openModal('confirmModal');
+    $('#confirmProceed').onclick=guarded(()=>{safePersistNew(workspace);closeModal($('#confirmModal'));revokePreview();startFreshAfterReset();});
+    return;
+  }
+  startFresh();
+}
+function startFreshAfterReset() {
+  generation++; revokePreview(); closeDrawer(); closeModal($('#assessmentModal'));
+  $('#assessmentForm').reset(); $('#revision').value='Rev.01'; hideError();
+  switchView('workspace'); render();
+  showToast(message('newAssessmentStarted'));
+}
+function switchView(view, updateHash=true) {
+  const allowed=['dashboard','workspace','findings','rules','reports','about'];
+  if(!allowed.includes(view)) view='dashboard';
+  currentView=view;
+  $$('.view[data-view-panel]').forEach(panel=>panel.classList.toggle('active',panel.dataset.viewPanel===view));
+  $$('.nav-item').forEach(nav=>nav.classList.toggle('active',nav.dataset.view===view));
+  $('#pageTitle').textContent=message(({dashboard:'dashboardTitle',workspace:'workspacePageTitle',findings:'findingsPageTitle',rules:'rulesPageTitle',reports:'reportsPageTitle',about:'aboutPageTitle'})[view]);
+  $('#crumb').textContent=`مِعيار AI / ${message(({dashboard:'navDashboard',workspace:'navWorkspace',findings:'navFindings',rules:'navRules',reports:'navReports',about:'navAbout'})[view])}`;
+  if(updateHash && location.hash !== `#${view}`) historyReplace(`#${view}`);
+  renderView(view);
+}
+function historyReplace(hash) {
+  try { window.history.replaceState(null,'',hash); }
+  catch { location.hash=hash; }
+}
+function render() {
+  try {
+    applyLanguage();
+    renderView(currentView);
+    $('#presentationBanner').classList.toggle('show',isPresentation);
+  } catch(error) {
+    console.error('Maeyar render failed',error);
+    showError(error,()=>render());
+  }
+}
+function renderView(view) {
+  hideError();
+  if(view==='dashboard') renderDashboard();
+  if(view==='workspace') renderWorkspace();
+  if(view==='findings') renderAllFindings();
+  if(view==='rules') renderRules();
+  if(view==='reports') renderReports();
+  if(view==='about') renderAbout();
+}
+function applyLanguage() {
+  document.documentElement.lang=lang; document.documentElement.dir=lang==='ar'?'rtl':'ltr';
+  document.title=lang==='ar'?'مِعيار AI | منصة الامتثال الكهربائي':'Maeyar AI | Electrical Compliance Copilot';
+  $('#languageToggle').textContent=lang==='ar'?'EN':'ع';
+  $$('[data-i18n]').forEach(el=>{ const text=message(el.dataset.i18n); if(text)el.textContent=text; });
+  $$('[data-i18n-placeholder]').forEach(el=>el.placeholder=message(el.dataset.i18nPlaceholder));
+}
+function pct(value) { return Number.isFinite(value) ? `${value.toFixed(1)}%` : '—'; }
+function findingsFor(source=workspace) { return source?.findings ?? []; }
+function openFinding(findingId) {
+  const finding=findingsFor().find(item=>item.id===findingId);
+  if(!finding)return;
+  const comments=(workspace.comments||[]).filter(comment=>comment.findingId===finding.id);
+  const sev=String(finding.severity||'Information').toLowerCase();
+  const title=bilingual(finding.title,lang);
+  $('#drawerContent').innerHTML=`
+    <span class="badge ${esc(sev)}">${esc(message(sev))}</span>
+    <p class="detail-kicker">${esc(finding.id)} · ${esc(finding.ruleId)} · v${esc(finding.ruleVersion)}</p>
+    <h2 id="drawerTitle">${esc(title)}</h2>
+    <p>${esc(finding.location||'—')} · ${esc(message('confidence'))} ${esc(`${Math.round((finding.confidence||0)*100)}%`)}</p>
+    <h3>${esc(message('evidenceChain'))}</h3>
+    <div class="trace-chain">
+      ${traceNode('drawingEvidence',finding.evidence?.drawing||workspace.drawing?.evidenceLabel||workspace.drawing?.name)}
+      ${traceNode('extracted',finding.evidence?.extracted||finding.extractedValue)}
+      ${traceNode('calculation',finding.evidence?.calculation||finding.calculation)}
+      ${traceNode('ruleBasis',finding.evidence?.rule||`${finding.ruleId} · ${finding.expectedRequirement||''}`)}
+      ${traceNode('finding',finding.evidence?.finding||title)}
+      ${traceNode('correctiveAction',finding.evidence?.correctiveAction||bilingual(finding.recommendedAction,lang))}
+    </div>
+    <div class="drawer-section"><h3>${esc(message('decision'))}: <span class="badge ${esc(String(finding.decision||'pending'))}">${esc(message(finding.decision||'pending'))}</span></h3>
+      ${finding.reviewer?`<p>${esc(message('reviewedBy'))}: ${esc(finding.reviewer)} · ${esc(time(finding.reviewedAt))}</p>`:''}
+      <label class="form-field"><span>${esc(message('reviewerLabel'))}</span><input id="findingReviewer" value="${esc(finding.reviewer||workspace.project?.reviewer||'')}" maxlength="120"></label>
+      <label class="form-field"><span>${esc(message('commentLabel'))}</span><textarea id="findingComment" rows="3" maxlength="1000" placeholder="${esc(message('commentLabel'))}">${esc(finding.comment||'')}</textarea></label>
+      <div class="decision-actions">
+        <button class="btn btn-primary" data-review-decision="accepted">${esc(message('accept'))}</button>
+        <button class="btn" data-review-decision="rejected">${esc(message('reject'))}</button>
+        <button class="btn" data-review-decision="resolved">${esc(message('resolve'))}</button>
+        <button class="btn" id="addFindingComment">${esc(message('addComment'))}</button>
+      </div>
+    </div>
+    <div class="drawer-section"><h3>${esc(message('noComments'))}</h3><div class="comment-list">${comments.length?comments.map(comment=>`<div class="comment-item"><small>${esc(comment.reviewer)} · ${esc(time(comment.timestamp))}</small>${esc(comment.comment)}</div>`).join(''):`<p>${esc(message('noComments'))}</p>`}</div></div>`;
+  $('#findingDrawer').classList.add('open'); $('#findingDrawer').setAttribute('aria-hidden','false');
+  $$('[data-review-decision]',$('#drawerContent')).forEach(button=>button.onclick=guarded(()=>{
+    const reviewer=$('#findingReviewer').value.trim(),comment=$('#findingComment').value.trim();
+    if(!reviewer||!comment){showToast(message('reviewRequired'));$('#findingComment').focus();return;}
+    workspace=reviewFinding(workspace,finding.id,{decision:button.dataset.reviewDecision,comment,reviewer});
+    persist(); closeDrawer(); render(); showToast(message('decisionSaved'));
+  }));
+  $('#addFindingComment').onclick=guarded(()=>{
+    const reviewer=$('#findingReviewer').value.trim(),comment=$('#findingComment').value.trim();
+    if(!reviewer||!comment){showToast(message('commentRequired'));return;}
+    workspace=addComment(workspace,finding.id,{comment,reviewer});persist();openFinding(finding.id);renderWorkspace();showToast(message('commentSaved'));
+  });
+}
+function traceNode(label,value) {
+  return `<div class="trace-node"><small>${esc(message(label))}</small><b>${esc(String(value??message('notSpecified')))}</b><p>${esc(label==='ruleBasis'?message('ruleDisclaimer'):'')}</p></div>`;
+}
+function statusPill(stage) { return `<span class="badge ${stage==='completed'?'pass':'pending'}">${esc(statusLabel(stage))}</span>`; }
+function renderDashboard() {
+  const stats=dashboardStats(history);
+  const open=history.reduce((sum,a)=>sum+(a.findings||[]).filter(f=>f.decision==='pending').length,0)+(workspace?.demo?0:(workspace?.findings||[]).filter(f=>f.decision==='pending').length);
+  const metrics=[
+    ['statTotal',stats.total,'assessmentsUnit',''],
+    ['statProgress',stats.inProgress,'statusReview',''],
+    ['statPassed',stats.passed,'statusCompleted',''],
+    ['statFindings',open,'pending','critical'],
+    ['statTime',stats.timeReduction==null?message('noTimeData'):pct(stats.timeReduction),stats.timeReduction==null?'noTimeData':'targetMark','gold']
+  ];
+  $('#dashboardMetrics').innerHTML=metrics.map(([label,value,sub,klass])=>`<article class="metric ${klass}"><span class="metric-label">${esc(message(label))}</span><strong>${esc(String(value??0))}</strong><small>${esc(message(sub))}</small></article>`).join('');
+  const shown=workspace?.demo?null:workspace;
+  $('#dashboardProjectMeta').textContent=shown?.project?.name?`${shown.project.name} · ${shown.project.city}`:message('noCurrent');
+  $('#dashboardStatus').textContent=shown?statusLabel(shown.stage):message('statusWaiting');
+  if(!shown || shown.stage==='project') {
+    $('#dashboardCurrent').innerHTML=`<div class="empty-state"><div class="empty-symbol">01</div><h3>${esc(message('projectsNone'))}</h3><p>${esc(message('startFirst'))}</p><button class="btn btn-primary" data-action="start-assessment">${esc(message('createOne'))}</button></div>`;
+  } else {
+    const pending=shown.findings.filter(f=>f.decision==='pending').length;
+    $('#dashboardCurrent').innerHTML=`<div style="padding:16px"><div class="toolbar-row" style="justify-content:space-between"><div><b>${esc(shown.project.name)}</b><div class="copyright-note">${esc(shown.project.buildingType)} · ${esc(shown.project.revision)} · ${esc(shown.drawing?.name||'')}</div></div>${statusPill(shown.stage)}</div><div class="target-row"><span>${esc(message('findingsTitle'))}</span><b>${shown.findings.length} · ${pending} ${esc(message('pending'))}</b></div><div class="form-actions"><button class="btn btn-primary btn-small" data-action="go-workspace">${esc(message('openWorkspace'))}</button></div></div>`;
+  }
+  const audit=[...(workspace?.demo?[]:(workspace?.audit||[])),...history.flatMap(a=>a.audit||[])].sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp)).slice(0,5);
+  $('#dashboardAudit').innerHTML=audit.length?`<div class="audit-list">${audit.map(a=>`<div class="audit-item"><time>${esc(time(a.timestamp))}</time><code>${esc(a.action)}</code><span>${esc(a.detail||'')}</span></div>`).join('')}</div>`:`<div class="empty-state"><h3>${esc(message('noAudit'))}</h3><p>${esc(message('auditTrailSubtitle'))}</p></div>`;
+}
+function renderWorkspace() {
+  const active=workspace && !workspace.demo && workspace.stage!=='project';
+  $('#stageStrip').innerHTML=[['stageProject','project'],['stageUpload','upload'],['stageExtraction','review'],['stageReview','completed']].map(([key,stage],i)=>{
+    const order={project:0,upload:1,ready:2,review:3,completed:4};
+    const current=order[workspace?.stage]??0;
+    return `<span class="stage-step ${current===i?'current':''} ${current>i?'done':''}"><i>${current>i?'✓':String(i+1).padStart(2,'0')}</i>${esc(message(key))}</span>`;
+  }).join('');
+  if(!active || workspace.stage==='project') {
+    $('#projectSetup').innerHTML=`<section class="surface project-form"><div class="section-heading"><div><h2>${esc(message('projectFormTitle'))}</h2><p>${esc(message('projectFormIntro'))}</p></div></div><div class="form-actions"><button class="btn btn-primary" data-action="start-assessment">${esc(message('startAssessment'))}</button></div><div class="empty-state"><div class="empty-symbol">01</div><h3>${esc(message('emptyStage'))}</h3><p>${esc(message('sampleExtractionNotice'))}</p></div></section>`;
+    $('#drawingSection,#sldSection,#equipmentSection,#workspaceFindings,#signoffSection').forEach?.(()=>{});
+    ['drawingSection','sldSection','equipmentSection','workspaceFindings','signoffSection'].forEach(id=>$(`#${id}`).classList.add('hidden'));
+    return;
+  }
+  $('#projectSetup').innerHTML=`<div class="surface project-form"><div class="toolbar-row" style="justify-content:space-between"><div><b>${esc(workspace.project.name)}</b><div class="copyright-note">${esc(workspace.project.city)} · ${esc(workspace.project.buildingType)} · ${esc(workspace.project.revision)}</div></div>${statusPill(workspace.stage)}</div></div>`;
+  $('#drawingSection').classList.remove('hidden');
+  $('#drawingStatus').textContent=statusLabel(workspace.stage);
+  renderDrawing();
+  const analyzed=['review','completed'].includes(workspace.stage);
+  $('#sldSection').classList.toggle('hidden',!analyzed);
+  $('#equipmentSection').classList.toggle('hidden',!analyzed);
+  $('#workspaceFindings').classList.toggle('hidden',!analyzed);
+  $('#signoffSection').classList.toggle('hidden',!analyzed);
+  $('#analyzeBtn').disabled=workspace.stage==='review'||workspace.stage==='completed';
+  if(analyzed) {
+    renderSld(); renderEquipment(); renderFindingList($('#workspaceFindingList'),workspace.findings.slice(0,4));
+    renderSignoff();
+  } else {
+    $('#sldCanvas').replaceChildren(); $('#equipmentRows').replaceChildren(); $('#workspaceFindingList').replaceChildren();
+  }
+}
+function renderDrawing() {
+  const drawing=workspace.drawing;
+  if(!drawing){$('#drawingPreview').innerHTML=`<div class="empty-state"><h3>${esc(message('fileRequired'))}</h3></div>`;return;}
+  const ext=drawing.name.split('.').pop().toLowerCase();
+  let preview='';
+  if(ext==='pdf'&&pdfUrl) preview=`<iframe title="${esc(message('pdfPreviewAlt'))}" src="${pdfUrl}#toolbar=1&navpanes=0"></iframe>`;
+  else preview=`<div class="empty-state"><div class="empty-symbol">${ext.toUpperCase()}</div><h3>${esc(message('pdfUnsupported'))}</h3><p>${esc(message('demoDrawing'))}</p></div>`;
+  $('#drawingPreview').innerHTML=`<div class="file-preview">${preview}</div><div class="file-meta"><b>${esc(message('fileMetadata'))}</b><div>${esc(message('fileName'))}: ${esc(drawing.name)} · ${esc(message('fileSize'))}: ${esc(sizeLabel(drawing.size))} · ${esc(message('fileType'))}: ${esc(drawing.type||ext.toUpperCase())}</div></div>`;
+}
+function renderSld() {
+  const equipment=workspace.equipment||[];
+  if(!equipment.length){$('#sldCanvas').innerHTML=`<div class="empty-state">${esc(message('noFindingsText'))}</div>`;return;}
+  const w=900,h=Math.max(360,90+equipment.length*78),lineX=320,boxX=385,boxW=190,loadX=760;
+  const rows=equipment.map((e,i)=>{
+    const y=52+i*78+38, calculation=workspace.calculations.find(c=>c.equipmentId===e.id);
+    const f=workspace.findings.find(item=>item.equipmentId===e.id&&item.severity==='Critical');
+    const color=f?'#bd4b4b':'#087f79';
+    return `<g data-equipment="${esc(e.id)}"><path d="M${lineX} ${y}H${boxX}" stroke="#3b6572" stroke-width="3"/><rect x="${boxX}" y="${y-25}" width="${boxW}" height="50" rx="4" fill="#fff" stroke="#285467" stroke-width="2"/><text x="${boxX+boxW/2}" y="${y-3}" text-anchor="middle" fill="#173847" font-family="IBM Plex Mono" font-size="15">${esc(e.label||e.id)}</text><text x="${boxX+boxW/2}" y="${y+15}" text-anchor="middle" fill="#687f88" font-size="11">${Number(e.breakerA).toFixed(0)} A · ${Number(e.cableMM2).toFixed(0)} mm²</text><path d="M${boxX+boxW} ${y}H${loadX-32}" stroke="#3b6572" stroke-width="3"/><circle cx="${loadX}" cy="${y}" r="29" fill="#fff" stroke="${color}" stroke-width="3"/><text x="${loadX}" y="${y-3}" text-anchor="middle" fill="#173847" font-family="IBM Plex Mono" font-size="13">${Number(e.loadKW).toFixed(0)}kW</text><text x="${loadX}" y="${y+12}" text-anchor="middle" fill="${color}" font-size="9">${calculation?calculation.currentA.toFixed(1):'—'} A</text>${f?`<circle cx="${boxX+boxW+18}" cy="${y-22}" r="12" fill="#bd4b4b"/><text x="${boxX+boxW+18}" y="${y-18}" text-anchor="middle" fill="white" font-size="10">!</text>`:''}</g>`;
+  }).join('');
+  const firstY=90+38, lastY=52+(equipment.length-1)*78+38;
+  $('#sldCanvas').innerHTML=`<div class="blueprint" id="blueprint" style="width:min(100%,${w}px)"><svg viewBox="0 0 ${w} ${h}" role="img" aria-label="${esc(message('sldTitle'))}" xmlns="http://www.w3.org/2000/svg"><defs><pattern id="techGrid" width="22" height="22" patternUnits="userSpaceOnUse"><path d="M22 0H0V22" fill="none" stroke="#d5e2de" stroke-width=".6"/></pattern></defs><rect width="${w}" height="${h}" fill="#f6faf8"/><rect width="${w}" height="${h}" fill="url(#techGrid)"/><rect x="35" y="${Math.max(20,(firstY+lastY)/2-35)}" width="145" height="70" rx="4" fill="#17394b"/><text x="107" y="${(firstY+lastY)/2-4}" text-anchor="middle" fill="#fff" font-size="14">MAIN SUPPLY</text><text x="107" y="${(firstY+lastY)/2+16}" text-anchor="middle" fill="#b9d1d4" font-size="10">400 V · 3Φ</text><path d="M180 ${(firstY+lastY)/2}H${lineX}V${firstY}${equipment.length>1?` M${lineX} ${lastY}V${firstY}`:''}" fill="none" stroke="#3b6572" stroke-width="3"/>${rows}<text x="28" y="${h-12}" fill="#71858c" font-family="IBM Plex Mono" font-size="10">MAEYAR · ILLUSTRATIVE MODEL · NOT EXTRACTED GEOMETRY</text></svg></div><span class="canvas-badge">${equipment.length} · ${esc(message('demoDrawing'))}</span>`;
+  $('#blueprint').style.transform=`scale(${zoom})`; $('#zoomValue').textContent=`${Math.round(zoom*100)}%`;
+}
+const fields=[['loadKW','connectedLoad'],['voltage','voltage'],['lengthM','length'],['cableMM2','cable'],['breakerA','breaker']];
+function renderEquipment() {
+  const data=workspace.equipment||[];
+  $('#equipmentHead').innerHTML=`<tr><th>${esc(message('location'))}</th>${fields.map(([,key])=>`<th>${esc(message(key))}</th>`).join('')}<th>${esc(message('designCurrent'))}</th><th>${esc(message('voltageDrop'))}</th><th>${esc(message('result'))}</th></tr>`;
+  $('#equipmentRows').innerHTML=data.map(e=>{
+    const calc=workspace.calculations.find(c=>c.equipmentId===e.id)||calculateEquipment(e);
+    const checks=workspace.checks.filter(c=>c.equipmentId===e.id);
+    const result=checks.some(c=>c.result==='fail')?'failed':checks.some(c=>c.result==='review')?'needsReview':'passed';
+    return `<tr data-equipment-id="${esc(e.id)}"><td><b>${esc(e.label||e.id)}</b><br><small>${esc(e.location||'')}</small></td>${fields.map(([field])=>`<td><input class="cell-input" type="number" min="0" step="any" aria-label="${esc(message(field))} ${esc(e.label||e.id)}" data-equip-field="${field}" value="${esc(e[field])}"></td>`).join('')}<td class="mono">${calc.currentA.toFixed(1)}</td><td class="mono">${calc.voltageDropPct.toFixed(2)}</td><td><span class="badge ${result==='passed'?'pass':result==='failed'?'critical':'pending'}">${esc(message(result))}</span></td></tr>`;
+  }).join('');
+  $$('.cell-input',$('#equipmentRows')).forEach(input=>input.onchange=guarded(()=>{
+    const row=input.closest('[data-equipment-id]'),val=Number(input.value);
+    if(!Number.isFinite(val)||val<0){renderEquipment();return;}
+    const equipment=workspace.equipment.find(item=>item.id===row.dataset.equipmentId);
+    const changes={[input.dataset.equipField]:val};
+    if(input.dataset.equipField==='loadKW') {
+      const total=(equipment.phaseLoadsKW||[1,1,1]).reduce((a,b)=>a+b,0)||3;
+      changes.phaseLoadsKW=equipment.phaseLoadsKW.map(v=>val*v/total);
+    }
+    workspace=updateEquipment(workspace,equipment.id,changes); persist(); render(); showToast(message('updated'));
+  }));
+}
+function renderFindingList(container,findings) {
+  if(!findings?.length){container.innerHTML=`<div class="empty-state"><div class="empty-symbol">—</div><h3>${esc(message('noFindings'))}</h3><p>${esc(message('noFindingsText'))}</p></div>`;return;}
+  container.innerHTML=findings.map(f=>{
+    const sev=String(f.severity||'Information').toLowerCase();
+    return `<article class="finding-card" tabindex="0" role="button" data-open-finding="${esc(f.id)}"><div class="finding-top"><span class="badge ${esc(sev)}">${esc(message(sev))}</span><span class="badge ${esc(f.decision||'pending')}">${esc(message(f.decision||'pending'))}</span></div><h3 class="finding-title">${esc(bilingual(f.title,lang))}</h3><p class="finding-summary">${esc(f.expectedRequirement||f.evidence?.finding||'')}</p><div class="finding-meta"><span>${esc(f.ruleId)} · ${esc(f.location||'')}</span><button tabindex="-1">${esc(message('viewDetails'))} →</button></div></article>`;
+  }).join('');
+  $$('[data-open-finding]',container).forEach(card=>{
+    card.onclick=()=>openFinding(card.dataset.openFinding);
+    card.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();openFinding(card.dataset.openFinding);}};
+  });
+}
+function renderAllFindings() {
+  const severity=$('#findingSeverityFilter'), decision=$('#findingDecisionFilter');
+  if(!severity.options.length) severity.innerHTML=`<option value="">${esc(message('selectSeverity'))}</option>${['Critical','Major','Minor','Information'].map(v=>`<option value="${v}">${esc(message(v.toLowerCase()))}</option>`).join('')}`;
+  if(!decision.options.length) decision.innerHTML=`<option value="">${esc(message('selectDecision'))}</option>${['pending','accepted','rejected','resolved'].map(v=>`<option value="${v}">${esc(message(v))}</option>`).join('')}`;
+  let items=findingsFor();
+  if(severity.value)items=items.filter(f=>f.severity===severity.value);
+  if(decision.value)items=items.filter(f=>f.decision===decision.value);
+  renderFindingList($('#allFindingsList'),items);
+}
+function renderSignoff() {
+  const decided=workspace.findings.every(f=>f.decision!=='pending');
+  if(workspace.stage==='completed'&&workspace.signoff) {
+    $('#signoffSection').innerHTML=`<div class="surface-head"><div><h3>${esc(message('reviewerSignoff'))}</h3><p>${esc(message('completedStatement'))}</p></div>${statusPill('completed')}</div><div class="table-note">${esc(workspace.signoff.reviewer)} · ${esc(workspace.signoff.license)} · ${esc(time(workspace.signoff.timestamp))}<br>${esc(workspace.signoff.comment)}<br><b>${esc(workspace.signoff.statement)}</b></div>`;
+    return;
+  }
+  $('#signoffSection').innerHTML=`<div class="surface-head"><div><h3>${esc(message('reviewerSignoff'))}</h3><p>${esc(message('signoffIntro'))}</p></div><span class="badge ${decided?'pass':'pending'}">${decided?esc(message('accepted')):esc(message('pending'))}</span></div><div style="padding:14px"><div class="form-grid"><label class="form-field">${esc(message('reviewerLabel'))}<input id="signoffReviewer" value="${esc(workspace.project.reviewer||'')}" required></label><label class="form-field">${esc(message('license'))}<input id="signoffLicense" value="${esc(workspace.project.license||'')}" required></label><label class="form-field" style="grid-column:1/-1">${esc(message('signoffComment'))}<textarea id="signoffComment" rows="2" required></textarea></label></div><div class="form-actions"><button class="btn btn-primary" id="signoffBtn" ${decided?'':'disabled'}>${esc(message('signoffButton'))}</button></div></div>`;
+  $('#signoffBtn').onclick=guarded(()=>{
+    const reviewer=$('#signoffReviewer').value.trim(),license=$('#signoffLicense').value.trim(),comment=$('#signoffComment').value.trim();
+    if(!decided||!reviewer||!license||!comment){showToast(message('signoffMissing'));return;}
+    workspace=signOff(workspace,{reviewer,license,comment});persist();render();showToast(message('completedStatement'));
+  });
+}
+function renderRules() {
+  const packs=[...new Set(RULES.map(r=>r.pack))],sources=[...new Set(RULES.map(r=>r.source))];
+  fillFilter($('#rulePackFilter'),message('allPacks'),packs);
+  fillFilter($('#ruleSourceFilter'),message('allSources'),sources);
+  const status=$('#ruleStatusFilter');
+  if(!status.options.length)status.innerHTML=`<option value="">${esc(message('allStatuses'))}</option><option value="true">${esc(message('active'))}</option><option value="false">${esc(message('inactive'))}</option>`;
+  const query=$('#ruleSearch').value.trim().toLowerCase(),pack=$('#rulePackFilter').value,source=$('#ruleSourceFilter').value,active=status.value;
+  const filtered=RULES.filter(rule=>{
+    const title=bilingual(rule.title,lang);
+    const search=[rule.id,title,rule.title.en,rule.title.ar,rule.pack,rule.source,rule.clause].join(' ').toLowerCase();
+    return (!query||search.includes(query))&&(!pack||pack===rule.pack)&&(!source||source===rule.source)&&(active===''||String(rule.active)===active);
+  });
+  $('#rulesGrid').innerHTML=filtered.length?filtered.map(rule=>{
+    const historyHtml=(rule.history||[]).map(item=>`<li>${esc(item.date)} · ${esc(item.change)}</li>`).join('');
+    return `<article class="rule-card"><div class="rule-card-head"><code>${esc(rule.id)}</code><span class="badge ${rule.active?'pass':'minor'}">${esc(message(rule.active?'active':'inactive'))}</span></div><h3>${esc(bilingual(rule.title,lang))}</h3><div class="rule-meta"><span>${esc(rule.pack)}</span><span>${esc(rule.version)}</span><span>${esc(rule.discipline)}</span></div><div class="rule-detail"><b>${esc(message('source'))}:</b> ${esc(rule.source)}<br><b>${esc(message('edition'))}:</b> ${esc(rule.edition)}<br><b>${esc(message('clause'))}:</b> ${esc(rule.clause)}<br><b>${esc(message('inputs'))}:</b> ${esc((rule.inputs||[]).join(', '))}<br><b>${esc(message('method'))}:</b> ${esc(rule.method)}<br><b>${esc(message('logic'))}:</b> ${esc(rule.logic)}<br><b>${esc(message('verification'))}:</b> ${esc(rule.verificationStatus)}<br><b>${esc(message('effectiveDate'))}:</b> ${esc(rule.effectiveDate)}<br><b>${esc(message('testResult'))}:</b> ${esc(rule.testResult)}<br><b>${esc(message('correctiveAction'))}:</b> ${esc(bilingual(rule.action,lang))}</div><details><summary>${esc(message('ruleHistory'))}</summary><ul class="rule-history">${historyHtml}</ul></details></article>`;
+  }).join(''):`<div class="empty-state">${esc(message('noRules'))}</div>`;
+}
+function fillFilter(select,placeholder,values) {
+  const selected=select.value;
+  const next=`<option value="">${esc(placeholder)}</option>${values.map(value=>`<option value="${esc(value)}">${esc(value)}</option>`).join('')}`;
+  if(select.dataset.options!==next){select.innerHTML=next;select.dataset.options=next;}
+  if(values.includes(selected))select.value=selected;
+}
+function renderReports() {
+  const ready=workspace && !workspace.demo && ['review','completed'].includes(workspace.stage);
+  if(!ready) {
+    $('#reportPanel').innerHTML=`<div class="empty-state"><div class="empty-symbol">PDF</div><h3>${esc(message('noReport'))}</h3><p>${esc(message('noReportText'))}</p><button class="btn btn-primary" data-action="go-workspace">${esc(message('openWorkspace'))}</button></div>`;
+  } else {
+    $('#reportPanel').innerHTML=`<div class="toolbar-row" style="justify-content:space-between"><div><h3>${esc(message('reportReady'))}</h3><p>${esc(workspace.project.name)} · ${esc(workspace.project.revision)} · ${workspace.findings.length} ${esc(message('findingsTitle'))}</p></div><div class="toolbar-row"><button class="btn btn-small" id="generateReportBtn">${esc(message('generateReport'))}</button><button class="btn btn-primary btn-small" id="downloadReportBtn">${esc(message('downloadReport'))}</button></div></div><div class="banner-note">${esc(message('ruleDisclaimer'))}</div><iframe class="report-preview" id="reportPreview" title="${esc(message('reportReady'))}"></iframe>`;
+    if(reportUrl)$('#reportPreview').src=reportUrl;
+    $('#generateReportBtn').onclick=guarded(()=>createReportPreview());
+    $('#downloadReportBtn').onclick=guarded(async()=>{await downloadReport(workspace);});
+    $('#reportPreview').onload=()=>{};
+  }
+  const audits=workspace?.demo?[]:[...(workspace?.audit||[])].sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
+  $('#auditList').innerHTML=audits.length?`<div class="audit-list">${audits.map(a=>`<div class="audit-item"><time>${esc(time(a.timestamp))}</time><code>${esc(a.action)}</code><span><b>${esc(a.actor||'')}</b> — ${esc(a.detail||'')}</span></div>`).join('')}</div>`:`<div class="empty-state"><h3>${esc(message('noAudit'))}</h3></div>`;
+  $('#historyList').innerHTML=history.length?`<div class="audit-list">${history.map((a,i)=>`<div class="audit-item"><time>${esc(time(a.updatedAt||a.createdAt))}</time><code>${esc(a.stage)}</code><span><b>${esc(a.project?.name||'')}</b> · ${esc(a.project?.city||'')} <button class="btn btn-small" data-history-index="${i}">${esc(message('historyOpen'))}</button></span></div>`).join('')}</div>`:`<div class="empty-state"><h3>${esc(message('noHistory'))}</h3></div>`;
+  $$('[data-history-index]').forEach(button=>button.onclick=guarded(()=>{
+    const saved=history[Number(button.dataset.historyIndex)];
+    if(!saved)return;
+    if(pdfUrl)URL.revokeObjectURL(pdfUrl);pdfUrl=null;selectedFile=null;
+    workspace={...saved}; switchView('workspace');
+  }));
+}
+function createReportPreview() {
+  const html=generateReport(workspace);
+  if(reportUrl)URL.revokeObjectURL(reportUrl);
+  reportUrl=URL.createObjectURL(new Blob([html],{type:'text/html;charset=utf-8'}));
+  $('#reportPreview').src=reportUrl;
+}
+function renderAbout() {
+  const how=lang==='ar'
+    ?['رفع الرسم مع حفظه محليًا فقط.','استخراج عينة بيانات هندسية معلنة بوضوح.','حسابات وفحوصات حتمية بقواعد ذات معرف وإصدار.','مراجعة كل دليل وقرار بواسطة المهندس المرخص.','تقرير ثنائي اللغة وسجل أحداث ونتيجة مراجعة.']
+    :['Upload a drawing, keeping it browser-local.','Run a clearly disclosed sample extraction.','Calculate and check using deterministic, versioned rules.','Have the licensed engineer inspect evidence and decide.','Produce a bilingual report, audit trail, and review record.'];
+  const targets=lang==='ar'
+    ?[['metricReviewTime','25%'],['metricTraceability','100%'],['metricDecisionCoverage','100%'],['metricFalsePositive','< 5%']]
+    :[['metricReviewTime','25%'],['metricTraceability','100%'],['metricDecisionCoverage','100%'],['metricFalsePositive','< 5%']];
+  $('#architectureList').innerHTML=how.map(item=>`<li>${esc(item)}</li>`).join('');
+  $('#pilotTargets').innerHTML=targets.map(([key,value])=>`<div class="target-row"><span>${esc(message(key))} <small>${esc(message('targetMark'))}</small></span><b>${esc(value)}</b></div>`).join('');
+  $('#pilotPhases').innerHTML=['phase1','phase2','phase3'].map(key=>`<div class="target-row"><span>${esc(message(key))}</span><b>●</b></div>`).join('');
+  $('#pilotGuardrails').innerHTML=['guard1','guard2','guard3','guard4'].map(key=>`<li>${esc(message(key))}</li>`).join('');
+}
+function beginAnalysis() {
+  if(!workspace?.drawing||workspace.demo)return;
+  const token=++generation;
+  $('#analyzeBtn').disabled=true;
+  $('#analysisProgress').classList.remove('hidden');
+  $('#analysisProgress').innerHTML=`<div class="loading-line"></div><p>${esc(message('analyzing'))}</p>`;
+  const timer=setTimeout(guarded(()=>{
+    if(token!==generation||workspace.demo)return;
+    try {
+      workspace=analyzeAssessment(workspace);
+      $('#analysisProgress').classList.add('hidden');
+      persist(); render(); showToast(message('analysisDone'));
+    } catch(error) {
+      $('#analyzeBtn').disabled=false; $('#analysisProgress').classList.add('hidden');
+      showError(error,beginAnalysis);
+    }
+  }),450);
+  $('#analyzeBtn').dataset.timer=String(timer);
+}
+function validateFile(file) {
+  if(!file)throw new Error(message('fileRequired'));
+  const ext=file.name.split('.').pop().toLowerCase();
+  if(!validExtensions.has(ext))throw new Error(message('unsupportedFile'));
+  if(file.size>MAX_FILE_BYTES)throw new Error(message('fileTooLarge'));
+  return ext;
+}
+function acceptFile(file) {
+  const ext=validateFile(file);
+  if(pdfUrl){URL.revokeObjectURL(pdfUrl);pdfUrl=null;}
+  selectedFile=file;
+  if(ext==='pdf')pdfUrl=URL.createObjectURL(file);
+  $('#selectedFileName').textContent=`${file.name} · ${sizeLabel(file.size)}`;
+  return ext;
+}
+function submitAssessment(event) {
+  event.preventDefault();
+  try {
+    if(!selectedFile)throw new Error(message('fileRequired'));
+    const form=new FormData(event.currentTarget);
+    const project={
+      name:String(form.get('name')||'').trim(),city:String(form.get('city')||'').trim(),
+      buildingType:String(form.get('buildingType')||''),revision:String(form.get('revision')||'').trim(),
+      client:String(form.get('client')||'').trim(),reviewer:String(form.get('reviewer')||'').trim(),
+      license:String(form.get('license')||'').trim(),
+      ...(form.get('baselineMinutes')!==''?{baselineMinutes:Number(form.get('baselineMinutes'))}:{}),
+      ...(form.get('reviewMinutes')!==''?{reviewMinutes:Number(form.get('reviewMinutes'))}:{})
+    };
+    if(!project.name||!project.city||!project.reviewer||!project.license)throw new Error(message('projectRequired'));
+    const file=selectedFile;
+    let next=setProject(createAssessment(),project);
+    next=attachDrawing(next,{name:file.name,size:file.size,type:file.type});
+    workspace=next;
+    closeModal($('#assessmentModal'));
+    switchView('workspace');persist();render();showToast(message('newAssessmentStarted'));
+  } catch(error) {
+    showError(error);
+  }
+}
+function startPresentation() {
+  clearTimeout(presentationTimer);
+  const isolated=demoAssessment();
+  if(!isolated?.demo)throw new Error('Demo assessment must be isolated');
+  isPresentation=true;presentationStep=0;workspace=isolated;
+  presentationTimer=setTimeout(()=>endPresentation(),180000);
+  switchView('workspace');render();showToast(message('presentationStarted'));updatePresentation();
+}
+function updatePresentation() {
+  $('#presentationBanner').classList.toggle('show',isPresentation);
+  if(!isPresentation)return;
+  const steps=message('presentationSteps');
+  $('#presentationStepText').textContent=steps[presentationStep]||steps.at(-1);
+  $('#presentationNext').textContent=presentationStep>=2?message('restart'):message('next');
+  document.querySelectorAll('.spotlight').forEach(node=>node.classList.remove('spotlight'));
+  if(presentationStep===0)$('#dashboardView .welcome-band')?.classList.add('spotlight');
+  if(presentationStep===1) {
+    const equipment=workspace.equipment.find(e=>e.label==='DB-HVAC'||e.drawingLabel==='DB-HVAC');
+    const finding=workspace.findings.find(f=>f.equipmentId===equipment?.id);
+    if(finding) {
+      const card=$(`[data-open-finding="${CSS.escape(finding.id)}"]`);
+      card?.classList.add('spotlight');
+      if(currentView!=='workspace')switchView('workspace');
+    }
+    $('#blueprint')?.classList.add('spotlight');
+  }
+  if(presentationStep===2)$('#rulesView .banner-note')?.classList.add('spotlight');
+}
+function endPresentation() {
+  if(!isPresentation)return;
+  generation++;clearTimeout(presentationTimer);isPresentation=false;presentationStep=0;
+  workspace=workspaceBeforeDemo||genuineWorkspace;
+  if(workspaceBeforeDemo===undefined)workspace=genuineWorkspace||createAssessment();
+  workspaceBeforeDemo=undefined;genuineWorkspace=undefined;
+  $$('.spotlight').forEach(node=>node.classList.remove('spotlight'));
+  $('#presentationBanner').classList.remove('show');
+  switchView('dashboard');render();showToast(message('presentationEnded'));
+}
+let genuineWorkspace,workspaceBeforeDemo;
+function enterPresentation() {
+  genuineWorkspace=workspace;
+  workspaceBeforeDemo=workspace;
+  startPresentation();
+}
+function restartPresentation() {
+  workspace=demoAssessment();presentationStep=0;
+  switchView('workspace');render();updatePresentation();
+}
+function nextPresentation() {
+  if(presentationStep>=2){restartPresentation();return;}
+  presentationStep++;switchView(presentationStep===0?'dashboard':'workspace');render();updatePresentation();
+}
+function bindActions() {
+  $$('.nav-item').forEach(button=>button.onclick=()=>switchView(button.dataset.view));
+  $$('[data-action]').forEach(button=>button.onclick=guarded(()=>{
+    const action=button.dataset.action;
+    if(action==='start-assessment')openModal('assessmentModal');
+    if(action==='open-presentation')enterPresentation();
+    if(action==='go-workspace')switchView('workspace');
+    if(action==='go-findings')switchView('findings');
+    if(action==='go-reports')switchView('reports');
+  }));
+  $('#languageToggle').onclick=()=>{lang=lang==='ar'?'en':'ar';localStorage.setItem('maeyar-language',lang);render();};
+  $('#newAssessmentBtn').onclick=guarded(requestNewAssessment);
+  $('#newAssessmentInline').onclick=guarded(requestNewAssessment);
+  $('#presentationBtn').onclick=guarded(enterPresentation);
+  $('#presentationRestart').onclick=guarded(restartPresentation);
+  $('#presentationNext').onclick=guarded(nextPresentation);
+  $('#presentationExit').onclick=guarded(endPresentation);
+  $('#assessmentForm').onsubmit=submitAssessment;
+  $('#drawingFile').onchange=guarded(event=>{
+    const file=event.target.files?.[0];if(!file)return;
+    try{acceptFile(file);}catch(error){event.target.value='';selectedFile=null;showError(error);}
+  });
+  $('#analyzeBtn').onclick=guarded(beginAnalysis);
+  $('#recalculateBtn').onclick=guarded(()=>{
+    if(!workspace?.equipment?.length)return;
+    workspace.equipment.forEach(e=>calculateEquipment(e));
+    workspace=analyzeAssessment({...workspace,stage:'ready'});
+    persist();render();showToast(message('updated'));
+  });
+  $('#zoomIn').onclick=()=>{zoom=Math.min(1.5,zoom+.1);renderSld();};
+  $('#zoomOut').onclick=()=>{zoom=Math.max(.65,zoom-.1);renderSld();};
+  $('#fitBtn').onclick=()=>{zoom=1;renderSld();};
+  $('#findingSeverityFilter').onchange=renderAllFindings;
+  $('#findingDecisionFilter').onchange=renderAllFindings;
+  ['ruleSearch','rulePackFilter','ruleSourceFilter','ruleStatusFilter'].forEach(id=>{
+    const el=$(`#${id}`);el.addEventListener(id==='ruleSearch'?'input':'change',renderRules);
+  });
+  $('#drawerClose').onclick=closeDrawer;
+  $('#findingDrawer').onclick=e=>{if(e.target.id==='findingDrawer')closeDrawer();};
+  $$('.modal').forEach(modal=>{
+    modal.addEventListener('click',e=>{if(e.target===modal)closeModal(modal);});
+    $$('[data-close-modal]',modal).forEach(button=>button.onclick=()=>closeModal(modal));
+  });
+  $('#confirmProceed').onclick=guarded(()=>{safePersistNew(workspace);closeModal($('#confirmModal'));revokePreview();startFreshAfterReset();});
+  $('#errorRetry').onclick=guarded(()=>{hideError();lastErrorRetry?lastErrorRetry():render();});
+  document.addEventListener('keydown',event=>{
+    if(event.key==='Escape'){closeDrawer();$$('.modal.open').forEach(closeModal);}
+  });
+  window.addEventListener('hashchange',()=>switchView(location.hash.slice(1)||'dashboard',false));
+  window.addEventListener('beforeunload',()=>{if(pdfUrl)URL.revokeObjectURL(pdfUrl);if(reportUrl)URL.revokeObjectURL(reportUrl);});
+}
+function configureProjectForm() {
+  const types=[
+    ['projectTypeCommercial','commercial building'],['projectTypeResidential','residential building'],
+    ['projectTypeIndustrial','industrial facility'],['projectTypeHealthcare','healthcare facility'],['projectTypeOther','other']
+  ];
+  $('#buildingType').innerHTML=types.map(([key,value])=>`<option value="${esc(value)}">${esc(message(key))}</option>`).join('');
+}
+initWorkspace();
+configureProjectForm();
+bindActions();
+const requestedView=location.hash.slice(1);
+switchView(['dashboard','workspace','findings','rules','reports','about'].includes(requestedView)?requestedView:'dashboard',false);
+render();
