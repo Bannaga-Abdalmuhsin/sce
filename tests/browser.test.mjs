@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { spawn } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
-import { chromium } from 'playwright';
+import { chromium } from '@playwright/test';
 
 const executablePath = process.env.CHROMIUM_PATH || '/repl/tools/bin/chromium';
 
