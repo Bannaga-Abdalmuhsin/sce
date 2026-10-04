@@ -35,13 +35,13 @@
         <div class="topbar-title"><p class="crumb" id="crumb">مِعيار AI / لوحة العمل</p><h1 id="pageTitle">مراجعة هندسية قابلة للتتبع</h1></div>
         <div class="top-actions"><span class="saved-state" id="saveState" aria-live="polite">● محفوظ محليًا</span><button class="lang-btn" id="languageToggle" aria-label="Switch language">EN</button><button class="btn btn-quiet desktop-action" id="presentationBtn">عرض توضيحي</button><button class="btn btn-danger desktop-action" id="newAssessmentBtn">تقييم جديد</button></div>
       </header>
+      <div class="error-banner" id="errorBanner" role="alert"><span id="errorMessage"></span><button class="btn btn-small" id="errorRetry">إعادة المحاولة</button></div>
+      <div class="presentation-banner" id="presentationBanner"><div><strong data-i18n="presentationMode">وضع العرض · بيانات معزولة وغير محفوظة</strong><div id="presentationStepText"></div></div><div class="presentation-controls"><button class="btn btn-small" id="presentationRestart" data-i18n="restart">إعادة البدء</button><button class="btn btn-small" id="presentationNext" data-i18n="next">التالي</button><button class="btn btn-small btn-dark" id="presentationExit" data-i18n="exitPresentation">إنهاء العرض</button></div></div>
       <div class="view active" id="dashboardView" data-view-panel="dashboard">
         <section class="welcome-band">
           <div class="welcome-copy"><span class="eyebrow" data-i18n="welcomeEyebrow">MAEYAR AI · ENGINEER-LED REVIEW</span><h2 data-i18n="heroMessage">مراجعات أسرع. قرارات قابلة للتتبع. والمهندس يبقى صاحب القرار.</h2><p data-i18n="heroSub">من دليل المخطط إلى القاعدة ثم قرار المراجع — كل حلقة ظاهرة، قابلة للتحقق، ومحفوظة في سجل التدقيق.</p></div>
           <div class="welcome-actions"><button class="btn btn-primary" data-action="start-assessment" data-i18n="startAssessment">بدء تقييم جديد</button><button class="btn" data-action="open-presentation" data-i18n="tryPresentation">استكشاف العرض التوضيحي</button></div>
         </section>
-        <div class="error-banner" id="errorBanner" role="alert"><span id="errorMessage"></span><button class="btn btn-small" id="errorRetry">إعادة المحاولة</button></div>
-        <div class="presentation-banner" id="presentationBanner"><div><strong data-i18n="presentationMode">وضع العرض · بيانات معزولة وغير محفوظة</strong><div id="presentationStepText"></div></div><div class="presentation-controls"><button class="btn btn-small" id="presentationRestart" data-i18n="restart">إعادة البدء</button><button class="btn btn-small" id="presentationNext" data-i18n="next">التالي</button><button class="btn btn-small btn-dark" id="presentationExit" data-i18n="exitPresentation">إنهاء العرض</button></div></div>
         <div class="metric-grid" id="dashboardMetrics" aria-live="polite"></div>
         <div class="section-heading"><div><h2 data-i18n="overviewTitle">نظرة عامة على مساحة العمل</h2><p data-i18n="overviewSubtitle">أرقام مبنية على التقييمات المحفوظة فقط؛ العرض التوضيحي مستثنى.</p></div><button class="btn btn-small" data-action="go-workspace" data-i18n="openWorkspace">فتح مساحة التدقيق</button></div>
         <div class="dashboard-grid">
