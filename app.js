@@ -5,7 +5,6 @@ import {
 } from './src/core/assessment.js';
 import { RULES, DEMO_DISCLAIMER } from './src/core/rules.js';
 import { calculateEquipment } from './src/core/calculations.js';
-import { generateReport, downloadReport } from './src/core/report.js';
 import { tr, esc, bilingual } from './src/ui/i18n.js';
 
 const $ = (selector, root=document) => root.querySelector(selector);
@@ -16,6 +15,7 @@ let lang = localStorage.getItem('maeyar-language') === 'en' ? 'en' : 'ar';
 let workspace, history = [], currentView = 'dashboard', selectedFile = null, pdfUrl = null, reportUrl = null;
 let isPresentation = false, presentationStep = 0, presentationTimer = null, generation = 0, zoom = 1;
 let lastErrorRetry = null, storageFailed = false;
+const modalReturnTargets = new WeakMap();
 
 function initWorkspace() {
   try {
@@ -62,6 +62,12 @@ function guarded(fn) {
 function persist() {
   if (isPresentation || workspace?.demo) return;
   try {
+    // A report preview is a snapshot. Invalidate it whenever its source changes.
+    if(reportUrl){
+      URL.revokeObjectURL(reportUrl);
+      reportUrl=null;
+      $('#reportPreview')?.setAttribute('src','about:blank');
+    }
     persistWorkspace(localStorage,workspace,history);
     storageFailed=false;
     $('#saveState').textContent=message('localWorkspace');
@@ -76,15 +82,16 @@ function revokePreview() {
 }
 function openModal(id) {
   const modal=$(`#${id}`); if(!modal)return;
+  modalReturnTargets.set(modal,document.activeElement);
   modal.classList.add('open'); modal.setAttribute('aria-hidden','false');
   const focusable=$('input:not([type=file]),button,select,textarea',modal); focusable?.focus();
-  modal.dataset.returnFocus=document.activeElement?.id || '';
 }
 function closeModal(modal) {
   if(!modal)return;
   modal.classList.remove('open'); modal.setAttribute('aria-hidden','true');
-  const previous=modal.dataset.returnFocus && $(`#${modal.dataset.returnFocus}`);
-  previous?.focus();
+  const previous=modalReturnTargets.get(modal);
+  if(previous?.isConnected)previous.focus?.();
+  modalReturnTargets.delete(modal);
 }
 function closeDrawer() {
   $('#findingDrawer').classList.remove('open'); $('#findingDrawer').setAttribute('aria-hidden','true');
@@ -106,7 +113,6 @@ function startFresh() {
   $('#assessmentForm').reset();
   $('#revision').value='Rev.01';
   $('#projectTypeCommercial')?.removeAttribute('selected');
-  $('#workspaceFindings,#sldSection,#equipmentSection,#drawingSection,#signoffSection').forEach?.(()=>{});
   safePersistNew(workspace);
   storageFailed=false;
   switchView('workspace');
@@ -221,14 +227,16 @@ function traceNode(label,value) {
 }
 function statusPill(stage) { return `<span class="badge ${stage==='completed'?'pass':'pending'}">${esc(statusLabel(stage))}</span>`; }
 function renderDashboard() {
-  const stats=dashboardStats(history);
-  const open=history.reduce((sum,a)=>sum+(a.findings||[]).filter(f=>f.decision==='pending').length,0)+(workspace?.demo?0:(workspace?.findings||[]).filter(f=>f.decision==='pending').length);
+  const genuineAssessments=workspace?.demo?[...history]:[...history,...(workspace?.project?.name?[workspace]:[])];
+  const stats=dashboardStats(genuineAssessments);
   const metrics=[
     ['statTotal',stats.total,'assessmentsUnit',''],
     ['statProgress',stats.inProgress,'statusReview',''],
-    ['statPassed',stats.passed,'statusCompleted',''],
-    ['statFindings',open,'pending','critical'],
-    ['statTime',stats.timeReduction==null?message('noTimeData'):pct(stats.timeReduction),stats.timeReduction==null?'noTimeData':'targetMark','gold']
+    ['statPassed',stats.passed,'passed',''],
+    ['statWarnings',stats.warnings,'major','gold'],
+    ['statCritical',stats.critical,'critical','critical'],
+    ['statPending',stats.pending,'pending',''],
+    ['statTime',stats.timeReduction==null?message('noTimeData'):pct(stats.timeReduction),stats.timeReduction==null?'noTimeData':'observedMetric','gold']
   ];
   $('#dashboardMetrics').innerHTML=metrics.map(([label,value,sub,klass])=>`<article class="metric ${klass}"><span class="metric-label">${esc(message(label))}</span><strong>${esc(String(value??0))}</strong><small>${esc(message(sub))}</small></article>`).join('');
   const shown=workspace?.demo?null:workspace;
@@ -244,7 +252,7 @@ function renderDashboard() {
   $('#dashboardAudit').innerHTML=audit.length?`<div class="audit-list">${audit.map(a=>`<div class="audit-item"><time>${esc(time(a.timestamp))}</time><code>${esc(a.action)}</code><span>${esc(a.detail||'')}</span></div>`).join('')}</div>`:`<div class="empty-state"><h3>${esc(message('noAudit'))}</h3><p>${esc(message('auditTrailSubtitle'))}</p></div>`;
 }
 function renderWorkspace() {
-  const active=workspace && !workspace.demo && workspace.stage!=='project';
+  const active=workspace && (workspace.demo || workspace.stage!=='project');
   $('#stageStrip').innerHTML=[['stageProject','project'],['stageUpload','upload'],['stageExtraction','review'],['stageReview','completed']].map(([key,stage],i)=>{
     const order={project:0,upload:1,ready:2,review:3,completed:4};
     const current=order[workspace?.stage]??0;
@@ -252,7 +260,6 @@ function renderWorkspace() {
   }).join('');
   if(!active || workspace.stage==='project') {
     $('#projectSetup').innerHTML=`<section class="surface project-form"><div class="section-heading"><div><h2>${esc(message('projectFormTitle'))}</h2><p>${esc(message('projectFormIntro'))}</p></div></div><div class="form-actions"><button class="btn btn-primary" data-action="start-assessment">${esc(message('startAssessment'))}</button></div><div class="empty-state"><div class="empty-symbol">01</div><h3>${esc(message('emptyStage'))}</h3><p>${esc(message('sampleExtractionNotice'))}</p></div></section>`;
-    $('#drawingSection,#sldSection,#equipmentSection,#workspaceFindings,#signoffSection').forEach?.(()=>{});
     ['drawingSection','sldSection','equipmentSection','workspaceFindings','signoffSection'].forEach(id=>$(`#${id}`).classList.add('hidden'));
     return;
   }
@@ -278,7 +285,7 @@ function renderDrawing() {
   if(!drawing){$('#drawingPreview').innerHTML=`<div class="empty-state"><h3>${esc(message('fileRequired'))}</h3></div>`;return;}
   const ext=drawing.name.split('.').pop().toLowerCase();
   let preview='';
-  if(ext==='pdf'&&pdfUrl) preview=`<iframe title="${esc(message('pdfPreviewAlt'))}" src="${pdfUrl}#toolbar=1&navpanes=0"></iframe>`;
+  if(!workspace.demo&&ext==='pdf'&&pdfUrl) preview=`<iframe title="${esc(message('pdfPreviewAlt'))}" src="${pdfUrl}#toolbar=1&navpanes=0"></iframe>`;
   else preview=`<div class="empty-state"><div class="empty-symbol">${ext.toUpperCase()}</div><h3>${esc(message('pdfUnsupported'))}</h3><p>${esc(message('demoDrawing'))}</p></div>`;
   $('#drawingPreview').innerHTML=`<div class="file-preview">${preview}</div><div class="file-meta"><b>${esc(message('fileMetadata'))}</b><div>${esc(message('fileName'))}: ${esc(drawing.name)} · ${esc(message('fileSize'))}: ${esc(sizeLabel(drawing.size))} · ${esc(message('fileType'))}: ${esc(drawing.type||ext.toUpperCase())}</div></div>`;
 }
@@ -380,9 +387,9 @@ function renderReports() {
     $('#reportPanel').innerHTML=`<div class="empty-state"><div class="empty-symbol">PDF</div><h3>${esc(message('noReport'))}</h3><p>${esc(message('noReportText'))}</p><button class="btn btn-primary" data-action="go-workspace">${esc(message('openWorkspace'))}</button></div>`;
   } else {
     $('#reportPanel').innerHTML=`<div class="toolbar-row" style="justify-content:space-between"><div><h3>${esc(message('reportReady'))}</h3><p>${esc(workspace.project.name)} · ${esc(workspace.project.revision)} · ${workspace.findings.length} ${esc(message('findingsTitle'))}</p></div><div class="toolbar-row"><button class="btn btn-small" id="generateReportBtn">${esc(message('generateReport'))}</button><button class="btn btn-primary btn-small" id="downloadReportBtn">${esc(message('downloadReport'))}</button></div></div><div class="banner-note">${esc(message('ruleDisclaimer'))}</div><iframe class="report-preview" id="reportPreview" title="${esc(message('reportReady'))}"></iframe>`;
-    if(reportUrl)$('#reportPreview').src=reportUrl;
+    $('#reportPreview').src=reportUrl||'about:blank';
     $('#generateReportBtn').onclick=guarded(()=>createReportPreview());
-    $('#downloadReportBtn').onclick=guarded(async()=>{await downloadReport(workspace);});
+    $('#downloadReportBtn').onclick=guarded(async()=>{const {downloadReport}=await import('./src/core/report.js');await downloadReport(workspace);});
     $('#reportPreview').onload=()=>{};
   }
   const audits=workspace?.demo?[]:[...(workspace?.audit||[])].sort((a,b)=>new Date(b.timestamp)-new Date(a.timestamp));
@@ -395,7 +402,8 @@ function renderReports() {
     workspace={...saved}; switchView('workspace');
   }));
 }
-function createReportPreview() {
+async function createReportPreview() {
+  const {generateReport}=await import('./src/core/report.js');
   const html=generateReport(workspace);
   if(reportUrl)URL.revokeObjectURL(reportUrl);
   reportUrl=URL.createObjectURL(new Blob([html],{type:'text/html;charset=utf-8'}));
@@ -476,8 +484,8 @@ function startPresentation() {
   const isolated=demoAssessment();
   if(!isolated?.demo)throw new Error('Demo assessment must be isolated');
   isPresentation=true;presentationStep=0;workspace=isolated;
-  presentationTimer=setTimeout(()=>endPresentation(),180000);
-  switchView('workspace');render();showToast(message('presentationStarted'));updatePresentation();
+  presentationTimer=setTimeout(()=>endPresentation(),175000);
+  switchView('dashboard');render();showToast(message('presentationStarted'));updatePresentation();
 }
 function updatePresentation() {
   $('#presentationBanner').classList.toggle('show',isPresentation);
@@ -486,24 +494,30 @@ function updatePresentation() {
   $('#presentationStepText').textContent=steps[presentationStep]||steps.at(-1);
   $('#presentationNext').textContent=presentationStep>=2?message('restart'):message('next');
   document.querySelectorAll('.spotlight').forEach(node=>node.classList.remove('spotlight'));
-  if(presentationStep===0)$('#dashboardView .welcome-band')?.classList.add('spotlight');
+  if(presentationStep===0) {
+    if(currentView!=='dashboard')switchView('dashboard');
+    $('#dashboardView .welcome-band')?.classList.add('spotlight');
+  }
   if(presentationStep===1) {
+    if(currentView!=='workspace')switchView('workspace');
+    render();
     const equipment=workspace.equipment.find(e=>e.label==='DB-HVAC'||e.drawingLabel==='DB-HVAC');
     const finding=workspace.findings.find(f=>f.equipmentId===equipment?.id);
     if(finding) {
       const card=$(`[data-open-finding="${CSS.escape(finding.id)}"]`);
       card?.classList.add('spotlight');
-      if(currentView!=='workspace')switchView('workspace');
     }
     $('#blueprint')?.classList.add('spotlight');
   }
-  if(presentationStep===2)$('#rulesView .banner-note')?.classList.add('spotlight');
+  if(presentationStep===2) {
+    if(currentView!=='rules')switchView('rules');
+    $('#rulesView .banner-note')?.classList.add('spotlight');
+  }
 }
 function endPresentation() {
   if(!isPresentation)return;
   generation++;clearTimeout(presentationTimer);isPresentation=false;presentationStep=0;
-  workspace=workspaceBeforeDemo||genuineWorkspace;
-  if(workspaceBeforeDemo===undefined)workspace=genuineWorkspace||createAssessment();
+  workspace=workspaceBeforeDemo||genuineWorkspace||createAssessment();
   workspaceBeforeDemo=undefined;genuineWorkspace=undefined;
   $$('.spotlight').forEach(node=>node.classList.remove('spotlight'));
   $('#presentationBanner').classList.remove('show');
@@ -521,18 +535,22 @@ function restartPresentation() {
 }
 function nextPresentation() {
   if(presentationStep>=2){restartPresentation();return;}
-  presentationStep++;switchView(presentationStep===0?'dashboard':'workspace');render();updatePresentation();
+  presentationStep++;render();updatePresentation();
 }
 function bindActions() {
   $$('.nav-item').forEach(button=>button.onclick=()=>switchView(button.dataset.view));
-  $$('[data-action]').forEach(button=>button.onclick=guarded(()=>{
-    const action=button.dataset.action;
-    if(action==='start-assessment')openModal('assessmentModal');
-    if(action==='open-presentation')enterPresentation();
-    if(action==='go-workspace')switchView('workspace');
-    if(action==='go-findings')switchView('findings');
-    if(action==='go-reports')switchView('reports');
-  }));
+  document.addEventListener('click',event=>{
+    const button=event.target.closest?.('[data-action]');
+    if(!button)return;
+    guarded(()=>{
+      const action=button.dataset.action;
+      if(action==='start-assessment')openModal('assessmentModal');
+      if(action==='open-presentation')enterPresentation();
+      if(action==='go-workspace')switchView('workspace');
+      if(action==='go-findings')switchView('findings');
+      if(action==='go-reports')switchView('reports');
+    })();
+  });
   $('#languageToggle').onclick=()=>{lang=lang==='ar'?'en':'ar';localStorage.setItem('maeyar-language',lang);render();};
   $('#newAssessmentBtn').onclick=guarded(requestNewAssessment);
   $('#newAssessmentInline').onclick=guarded(requestNewAssessment);
@@ -573,6 +591,8 @@ function bindActions() {
   });
   window.addEventListener('hashchange',()=>switchView(location.hash.slice(1)||'dashboard',false));
   window.addEventListener('beforeunload',()=>{if(pdfUrl)URL.revokeObjectURL(pdfUrl);if(reportUrl)URL.revokeObjectURL(reportUrl);});
+  window.addEventListener('error',event=>{console.error('Maeyar application error',event.error);showError(event.error);});
+  window.addEventListener('unhandledrejection',event=>{console.error('Maeyar asynchronous error',event.reason);showError(event.reason);});
 }
 function configureProjectForm() {
   const types=[

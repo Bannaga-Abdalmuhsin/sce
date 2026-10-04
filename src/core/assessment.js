@@ -191,10 +191,11 @@ function validAssessment(candidate) {
 export function restoreWorkspace(storage) {
   const raw = storage.getItem(WORKSPACE_KEY);
   if (!raw) return { assessment: createAssessment(), history: [] };
+  /** @type {{schema?:number,assessment?:unknown,history?:unknown}} */
   let saved;
   try { saved = JSON.parse(raw); } catch { throw new Error('Saved workspace is corrupted. Export/clear local browser data to recover. / بيانات المتصفح تالفة؛ امسحها للبدء من جديد.'); }
   if (saved.schema !== 2 || !validAssessment(saved.assessment) || !Array.isArray(saved.history) ||
-      !saved.history.every(a => validAssessment(a) && a.stage === 'completed' && a.signoff)) {
+      !saved.history.every((/** @type {unknown} */ a) => validAssessment(a) && a.stage === 'completed' && a.signoff)) {
     throw new Error('Saved workspace format is invalid; recovery requires starting a clean workspace / صيغة البيانات المحفوظة غير صحيحة');
   }
   return { assessment: saved.assessment, history: saved.history };

@@ -35,12 +35,14 @@ export function evaluateAssessment(assessment) {
   assessment.equipment.forEach((e, i) => {
     const c = calculations[i];
     check('SBC401-CUR-01', e.id, 'pass', `${c.currentA.toFixed(2)} A`, 'Valid balanced three-phase current', c.formula);
-    check('SBC401-OCP-07', e.id, c.currentA <= e.breakerA ? 'pass' : 'fail',
+    const breakerResult = c.currentA <= e.breakerA ? 'pass' : 'fail';
+    check('SBC401-OCP-07', e.id, breakerResult,
       `P=${e.loadKW} kW; V=${e.voltage} V; cosφ=${e.powerFactor}; In=${e.breakerA} A`,
-      `Ib ≤ In; calculated ${c.currentA.toFixed(2)} A ≤ ${e.breakerA} A`, c.formula);
-    check('IEC60364-AMP-02', e.id, c.currentA <= c.correctedAmpacityA && e.breakerA <= c.correctedAmpacityA ? 'pass' : 'fail',
+      `Ib ≤ In; calculated ${c.currentA.toFixed(2)} A ${breakerResult === 'pass' ? '≤' : '>'} ${e.breakerA} A`, c.formula);
+    const ampacityResult = c.currentA <= c.correctedAmpacityA && e.breakerA <= c.correctedAmpacityA ? 'pass' : 'fail';
+    check('IEC60364-AMP-02', e.id, ampacityResult,
       `Table ampacity=${e.ampacityA} A; factor=${e.deratingFactor}; In=${e.breakerA} A`,
-      'Ib ≤ In ≤ corrected Iz',
+      `Ib=${c.currentA.toFixed(2)} A; In=${e.breakerA} A; corrected Iz=${c.correctedAmpacityA.toFixed(2)} A; ${ampacityResult === 'pass' ? 'Ib ≤ In ≤ Iz' : 'coordination check failed'}`,
       `Iz=${e.ampacityA}×${e.deratingFactor}=${c.correctedAmpacityA.toFixed(2)} A; Ib=${c.currentA.toFixed(2)} A`);
     check('PROJECT-VD-01', e.id, c.voltageDropPct <= 3 ? 'pass' : 'fail',
       `L=${e.lengthM} m; S=${e.cableMM2} mm²`, 'Illustrative project voltage drop ≤3%', c.voltageDropFormula);
@@ -60,9 +62,11 @@ export function evaluateAssessment(assessment) {
   });
   const load = loadSummary(assessment.equipment);
   const demandA = threePhaseCurrent(load.demandKW);
-  check('SBC401-LOAD-03', 'MDB-01', demandA <= 250 ? 'pass' : 'fail',
+  const demandResult = demandA <= 250 ? 'pass' : 'fail';
+  check('SBC401-LOAD-03', 'MDB-01', demandResult,
     `Connected=${load.connectedKW} kW; demand factor=${load.demandFactor}; main breaker=250 A (demo)`,
-    'Main breaker ≥ demand current', `Pd=${load.connectedKW}×${load.demandFactor}=${load.demandKW.toFixed(2)} kW; Id=${demandA.toFixed(2)} A`);
+    `Main breaker 250 A ${demandResult === 'pass' ? '≥' : '<'} calculated demand current ${demandA.toFixed(2)} A`,
+    `Pd=${load.connectedKW}×${load.demandFactor}=${load.demandKW.toFixed(2)} kW; Id=${demandA.toFixed(2)} A`);
   const missing = ['name', 'city', 'revision', 'client'].filter(k => !String(assessment.project[/** @type {keyof import('./models').Project} */(k)] ?? '').trim());
   if (!assessment.drawing?.name) missing.push('drawing');
   check('PROJECT-DOC-01', 'PROJECT', missing.length ? 'fail' : 'pass',
